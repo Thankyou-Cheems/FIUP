@@ -3,27 +3,35 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  workflow_dispatch: # Allows you to manually trigger it for testing
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
+# Prevent multiple deployments from overlapping
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
 jobs:
   deploy:
-    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       
       - name: Setup Pages
         uses: actions/configure-pages@v4
-        with:
-          enablement: true   # 自动启用 Pages
       
+      # Double-check that ./site exists and is not empty
+      - name: Check files
+        run: ls -R ./site
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
