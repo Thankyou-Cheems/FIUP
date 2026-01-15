@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FIUP Tool v2.0 - File Incremental Update Protocol Tool
+FIUP Tool v3.0 - File Incremental Update Protocol Tool
 文件增量更新协议工具
 
 Usage:
@@ -15,6 +15,12 @@ Usage:
     fiup -t ./file.py                  从stdin读取并应用到file.py
     fiup -c -t ./project               从剪贴板应用到目录
     cat ai_response.txt | fiup -t .    管道输入，应用到当前目录
+
+v3.0 新特性:
+    - 使用 → 可见字符表示缩进（→ = 4空格）
+    - 支持 ```fiup 代码块包裹
+    - 新增 CREATE 操作（创建新文件）
+    - 简化的标记语法
 """
 
 import re
@@ -28,7 +34,53 @@ from dataclasses import dataclass
 from typing import Optional
 from enum import Enum
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"
+
+# 缩进配置
+INDENT_CHAR = '→'
+INDENT_SIZE = 4  # 每个 → 转换为4个空格
+
+
+# ============== 缩进转换 ==============
+
+def convert_indent_to_spaces(text: str, indent_unit: str = '    ') -> str:
+    """将 → 转换为实际缩进（空格）"""
+    if not text:
+        return text
+    lines = []
+    for line in text.split('\n'):
+        indent_count = 0
+        i = 0
+        while i < len(line) and line[i] == INDENT_CHAR:
+            indent_count += 1
+            i += 1
+        rest = line[i:]
+        # 处理转义的箭头 \→
+        unescaped = rest.replace('\\' + INDENT_CHAR, INDENT_CHAR)
+        lines.append(indent_unit * indent_count + unescaped)
+    return '\n'.join(lines)
+
+
+def convert_spaces_to_indent(text: str, indent_unit: str = '    ') -> str:
+    """将实际缩进转换为 → （用于显示）"""
+    if not text:
+        return text
+    lines = []
+    for line in text.split('\n'):
+        indent_count = 0
+        pos = 0
+        # 检测空格缩进
+        while pos < len(line):
+            if line[pos:pos + len(indent_unit)] == indent_unit:
+                indent_count += 1
+                pos += len(indent_unit)
+            elif line[pos] == '\t':
+                indent_count += 1
+                pos += 1
+            else:
+                break
+        lines.append(INDENT_CHAR * indent_count + line[pos:])
+    return '\n'.join(lines)
 
 
 # ============== 数据结构 ==============
@@ -38,6 +90,7 @@ class Operation(Enum):
     INSERT_AFTER = "INSERT_AFTER"
     INSERT_BEFORE = "INSERT_BEFORE"
     DELETE = "DELETE"
+    CREATE = "CREATE"
 
 
 class MatchResult(Enum):
@@ -52,9 +105,12 @@ class Patch:
     """单个补丁的数据结构"""
     file: str
     operation: Operation
-    anchor: str
-    content: str = ""
+    anchor: str           # 原始格式（带 →）
+    content: str = ""     # 原始格式（带 →）
+    anchor_real: str = "" # 转换后的实际代码
+    content_real: str = "" # 转换后的实际代码
     line_number: int = 0
+    raw: str = ""         # 原始补丁文本
 
 
 @dataclass
@@ -78,35 +134,76 @@ class ApplyResult:
 # ============== 解析器 ==============
 
 class FIUPParser:
-    """解析 FIUP v2.0 格式的补丁"""
+    """解析 FIUP v3.0 格式的补丁"""
     
-    PATCH_PATTERN = re.compile(
-        r'<<<FIUP_PATCH\s+file="([^"]+)">>>\s*'
-        r'\[OPERATION\]:\s*(REPLACE|INSERT_AFTER|INSERT_BEFORE|DELETE)\s*'
-        r'<<<ANCHOR>>>\n(.*?)<<<END_ANCHOR>>>\s*'
-        r'(?:<<<CONTENT>>>\n(.*?)<<<END_CONTENT>>>\s*)?'
-        r'<<<END_FIUP_PATCH>>>',
-        re.DOTALL
-    )
+    # 匹配 ```fiup ... ``` 代码块
+    CODE_BLOCK_PATTERN = re.compile(r'```(?:fiup)?\s*\n([\s\S]*?)```', re.MULTILINE)
+    
+    # 匹配单个 FIUP 块
+    BLOCK_PATTERN = re.compile(r'<<<FIUP>>>([\s\S]*?)<<<END>>>', re.MULTILINE)
+    
+    @classmethod
+    def _strip_code_blocks(cls, text: str) -> str:
+        """移除 ```fiup 代码块包裹，提取内容"""
+        extracted = []
+        for match in cls.CODE_BLOCK_PATTERN.finditer(text):
+            extracted.append(match.group(1))
+        
+        if extracted:
+            return '\n'.join(extracted)
+        return text
     
     @classmethod
     def parse(cls, text: str) -> list[Patch]:
         """解析补丁文本，返回补丁列表"""
+        # 先移除代码块包裹
+        content = cls._strip_code_blocks(text)
+        
         patches = []
         
-        for match in cls.PATCH_PATTERN.finditer(text):
-            file_path = match.group(1)
-            operation = Operation(match.group(2))
-            anchor = match.group(3).rstrip('\n')
-            content = match.group(4).rstrip('\n') if match.group(4) else ""
+        for match in cls.BLOCK_PATTERN.finditer(content):
+            raw = match.group(0)
+            inner = match.group(1)
             line_number = text[:match.start()].count('\n') + 1
+            
+            # 解析 [FILE]:
+            file_match = re.search(r'\[FILE\]:\s*(.+?)(?:\n|$)', inner)
+            file_path = file_match.group(1).strip() if file_match else ''
+            
+            # 解析 [OP]:
+            op_match = re.search(r'\[OP\]:\s*(REPLACE|INSERT_AFTER|INSERT_BEFORE|DELETE|CREATE)(?:\n|$)', inner, re.IGNORECASE)
+            operation_str = op_match.group(1).upper() if op_match else ''
+            
+            try:
+                operation = Operation(operation_str)
+            except ValueError:
+                continue  # 跳过无效操作
+            
+            # 解析 [ANCHOR] 部分
+            anchor = ''
+            anchor_match = re.search(r'\[ANCHOR\]\s*\n([\s\S]*?)(?=\[CONTENT\]|$)', inner)
+            if anchor_match:
+                anchor = anchor_match.group(1).rstrip('\n')
+            
+            # 解析 [CONTENT] 部分
+            content_text = ''
+            content_match = re.search(r'\[CONTENT\]\s*\n([\s\S]*?)$', inner)
+            if content_match:
+                content_text = content_match.group(1).rstrip('\n')
+            
+            # 转换缩进
+            anchor_real = convert_indent_to_spaces(anchor)
+            content_real = convert_indent_to_spaces(content_text)
             
             patches.append(Patch(
                 file=file_path,
                 operation=operation,
                 anchor=anchor,
-                content=content,
-                line_number=line_number
+                content=content_text,
+                anchor_real=anchor_real,
+                content_real=content_real,
+                line_number=line_number,
+                raw=raw
             ))
         
         return patches
@@ -114,8 +211,9 @@ class FIUPParser:
     @classmethod
     def extract_blocks(cls, text: str) -> list[str]:
         """从文本中提取所有FIUP块的原始文本"""
+        content = cls._strip_code_blocks(text)
         blocks = []
-        for match in cls.PATCH_PATTERN.finditer(text):
+        for match in cls.BLOCK_PATTERN.finditer(content):
             blocks.append(match.group(0))
         return blocks
     
@@ -127,18 +225,17 @@ class FIUPParser:
         patches = cls.parse(text)
         
         if not patches:
-            if "<<<FIUP_PATCH" in text:
+            if "<<<FIUP>>>" in text:
                 errors.append("检测到补丁标记但解析失败，请检查格式:")
-                if "[OPERATION]:" not in text:
-                    errors.append("  ✗ 缺少 [OPERATION]: 标记")
-                if "<<<ANCHOR>>>" not in text:
-                    errors.append("  ✗ 缺少 <<<ANCHOR>>> 标记")
-                if "<<<END_ANCHOR>>>" not in text:
-                    errors.append("  ✗ 锚点块未正确闭合 (缺少 <<<END_ANCHOR>>>)")
-                if "<<<END_FIUP_PATCH>>>" not in text:
-                    errors.append("  ✗ 缺少 <<<END_FIUP_PATCH>>> 结束标记")
+                if "[FILE]:" not in text:
+                    errors.append("  ✗ 缺少 [FILE]: 标记")
+                if "[OP]:" not in text:
+                    errors.append("  ✗ 缺少 [OP]: 标记")
+                if "<<<END>>>" not in text:
+                    errors.append("  ✗ 缺少 <<<END>>> 结束标记")
             else:
                 errors.append("未检测到有效的 FIUP 补丁块")
+                errors.append("提示: v3.0 格式使用 <<<FIUP>>> 和 <<<END>>> 标记")
             return False, errors
         
         for i, patch in enumerate(patches):
@@ -147,18 +244,28 @@ class FIUPParser:
             if not patch.file:
                 errors.append(f"{prefix}文件路径为空")
             
-            if not patch.anchor.strip():
-                errors.append(f"{prefix}锚点内容为空")
-            
-            anchor_lines = len(patch.anchor.strip().splitlines())
-            if anchor_lines < 2:
-                warnings.append(f"{prefix}⚠ 锚点仅 {anchor_lines} 行，建议 3-6 行以确保唯一性")
-            
-            if patch.operation != Operation.DELETE and not patch.content.strip():
-                errors.append(f"{prefix}非 DELETE 操作但内容为空")
+            if patch.operation == Operation.CREATE:
+                if not patch.content.strip():
+                    errors.append(f"{prefix}CREATE 操作但内容为空")
+            else:
+                if not patch.anchor.strip():
+                    errors.append(f"{prefix}锚点内容为空")
+                
+                anchor_lines = len(patch.anchor.strip().splitlines())
+                if anchor_lines < 2:
+                    warnings.append(f"{prefix}⚠ 锚点仅 {anchor_lines} 行，建议 3-6 行以确保唯一性")
+                
+                if patch.operation != Operation.DELETE and not patch.content.strip():
+                    errors.append(f"{prefix}非 DELETE/CREATE 操作但内容为空")
             
             if '...' in patch.anchor or '# ...' in patch.anchor:
                 warnings.append(f"{prefix}⚠ 锚点中包含 '...'，这可能导致匹配失败")
+            
+            # 检查是否正确使用了 → 缩进
+            if patch.anchor and not any(c == INDENT_CHAR for c in patch.anchor):
+                # 检查原始锚点是否有空格缩进
+                if any(line.startswith('    ') or line.startswith('\t') for line in patch.anchor.split('\n') if line):
+                    warnings.append(f"{prefix}⚠ 锚点使用了空格/制表符缩进，建议使用 → 字符")
         
         return len(errors) == 0, errors + warnings
 
@@ -290,6 +397,7 @@ class FIUPApplier:
         self.strict = strict
         self.interactive = interactive
         self.backup_dir: Optional[Path] = None
+        self.created_files: list[Path] = []  # 新建的文件列表
     
     def apply_all(self, patches: list[Patch]) -> list[ApplyResult]:
         """应用所有补丁"""
@@ -303,6 +411,14 @@ class FIUPApplier:
         file_contents: dict[str, str] = {}
         
         for patch in patches:
+            # CREATE 操作特殊处理
+            if patch.operation == Operation.CREATE:
+                result = self._apply_create(patch)
+                results.append(result)
+                if result.success:
+                    file_contents[patch.file] = result.new_text
+                continue
+            
             file_path = self.target_dir / patch.file
             
             if patch.file not in file_contents:
@@ -340,14 +456,41 @@ class FIUPApplier:
                 file_path = self.target_dir / file_rel
                 file_results = [r for r in results if r.patch.file == file_rel]
                 if all(r.success for r in file_results):
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
                     file_path.write_text(content, encoding='utf-8')
         
         return results
     
+    def _apply_create(self, patch: Patch) -> ApplyResult:
+        """应用 CREATE 操作"""
+        file_path = self.target_dir / patch.file
+        
+        if file_path.exists() and not self.dry_run:
+            return ApplyResult(
+                success=False,
+                patch=patch,
+                match_result=MatchResult.MULTIPLE,
+                message=f"文件已存在: {file_path}",
+                original_text="",
+                new_text=patch.content_real
+            )
+        
+        self.created_files.append(file_path)
+        
+        return ApplyResult(
+            success=True,
+            patch=patch,
+            match_result=MatchResult.EXACT,
+            message=f"创建新文件",
+            original_text="",
+            new_text=patch.content_real
+        )
+    
     def _apply_patch(self, content: str, patch: Patch) -> ApplyResult:
         """应用单个补丁"""
+        # 使用转换后的实际代码进行匹配
         match_result, start, end, similar = TextMatcher.find_anchor(
-            content, patch.anchor, strict=self.strict
+            content, patch.anchor_real, strict=self.strict
         )
         
         if match_result == MatchResult.NOT_FOUND:
@@ -397,14 +540,17 @@ class FIUPApplier:
         after = content[end:]
         matched = content[start:end]
         
+        # 使用转换后的实际代码
+        new_code = patch.content_real
+        
         if patch.operation == Operation.REPLACE:
-            return before + patch.content + after
+            return before + new_code + after
         elif patch.operation == Operation.INSERT_AFTER:
             separator = '\n' if not matched.endswith('\n') else ''
-            return before + matched + separator + patch.content + after
+            return before + matched + separator + new_code + after
         elif patch.operation == Operation.INSERT_BEFORE:
-            separator = '\n' if not patch.content.endswith('\n') else ''
-            return before + patch.content + separator + matched + after
+            separator = '\n' if not new_code.endswith('\n') else ''
+            return before + new_code + separator + matched + after
         elif patch.operation == Operation.DELETE:
             return before + after
         return content
@@ -412,8 +558,8 @@ class FIUPApplier:
     def _confirm_fuzzy_match(self, result: ApplyResult) -> bool:
         """交互式确认模糊匹配"""
         print_colored(f"\n⚠ 模糊匹配确认 (行 {result.match_line}):", "yellow")
-        print("  锚点:")
-        for line in result.patch.anchor.split('\n')[:5]:
+        print("  锚点 (→ 已转换为空格):")
+        for line in result.patch.anchor_real.split('\n')[:5]:
             print(f"    {line}")
         print("\n  是否应用此补丁? [y/N] ", end="")
         try:
@@ -493,6 +639,7 @@ def read_patch_input(args) -> Optional[str]:
     if patch_file == '-':
         if sys.stdin.isatty():
             print_colored("等待输入补丁内容 (Ctrl+D 结束):", "cyan")
+            print_colored("提示: v3.0 使用 → 表示缩进，<<<FIUP>>>...<<<END>>> 包裹补丁", "gray")
         return sys.stdin.read()
     else:
         patch_path = Path(patch_file)
@@ -506,7 +653,15 @@ def resolve_target(args, patches: list[Patch]) -> Optional[Path]:
     """解析目标路径"""
     target_path = Path(args.target).resolve()
     
+    # CREATE 操作可以创建不存在的目录
+    create_patches = [p for p in patches if p.operation == Operation.CREATE]
+    non_create_patches = [p for p in patches if p.operation != Operation.CREATE]
+    
     if not target_path.exists():
+        if create_patches and not non_create_patches:
+            # 全部是 CREATE 操作，可以创建目录
+            target_path.mkdir(parents=True, exist_ok=True)
+            return target_path
         print_colored(f"错误: 目标路径不存在: {target_path}", "red")
         return None
     
@@ -514,13 +669,14 @@ def resolve_target(args, patches: list[Patch]) -> Optional[Path]:
         target_dir = target_path.parent
         target_filename = target_path.name
         
-        patch_files = set(p.file for p in patches)
+        patch_files = set(p.file for p in non_create_patches)
         if len(patch_files) == 1:
             patch_file = list(patch_files)[0]
             if patch_file != target_filename and Path(patch_file).name != target_filename:
                 print_colored(f"映射: {patch_file} → {target_filename}", "cyan")
                 for p in patches:
-                    p.file = target_filename
+                    if p.operation != Operation.CREATE:
+                        p.file = target_filename
         
         return target_dir
     
@@ -541,7 +697,12 @@ def cmd_apply(args):
             print_colored(f"  {err}", "yellow")
         return 1
     
-    print_colored(f"解析到 {len(patches)} 个补丁", "cyan")
+    # 统计操作类型
+    op_counts = {}
+    for p in patches:
+        op_counts[p.operation.value] = op_counts.get(p.operation.value, 0) + 1
+    op_summary = ", ".join(f"{v} {k}" for k, v in op_counts.items())
+    print_colored(f"解析到 {len(patches)} 个补丁 ({op_summary})", "cyan")
     
     target_dir = resolve_target(args, patches)
     if target_dir is None:
@@ -568,7 +729,11 @@ def cmd_apply(args):
         status = "✓" if result.success else "✗"
         color = "green" if result.success else "red"
         
-        print_colored(f"{status} #{i+1} [{result.patch.operation.value}] {result.patch.file}", color)
+        op_str = result.patch.operation.value
+        if result.patch.operation == Operation.CREATE:
+            op_str = "CREATE (新建)"
+        
+        print_colored(f"{status} #{i+1} [{op_str}] {result.patch.file}", color)
         print(f"   {result.message}")
         
         if not result.success and result.similar_candidates:
@@ -581,6 +746,9 @@ def cmd_apply(args):
     
     if applier.backup_dir and not args.dry_run:
         print_colored(f"备份: {applier.backup_dir}", "blue")
+    
+    if applier.created_files and not args.dry_run:
+        print_colored(f"新建: {len(applier.created_files)} 个文件", "magenta")
     
     return 0 if success_count == len(results) else 1
 
@@ -607,9 +775,13 @@ def cmd_validate(args):
         patches = FIUPParser.parse(patch_text)
         print_colored(f"✓ 格式有效，共 {len(patches)} 个补丁", "green")
         for i, patch in enumerate(patches):
-            anchor_preview = patch.anchor.split('\n')[0][:50]
+            anchor_preview = patch.anchor.split('\n')[0][:50] if patch.anchor else "(无锚点)"
             print(f"   #{i+1}: {patch.operation.value} @ {patch.file}")
-            print_colored(f"        锚点: {anchor_preview}...", "gray")
+            if patch.operation != Operation.CREATE:
+                print_colored(f"        锚点: {anchor_preview}...", "gray")
+            else:
+                content_lines = len(patch.content.split('\n'))
+                print_colored(f"        内容: {content_lines} 行", "gray")
     
     for msg in messages:
         if msg.startswith("⚠"):
@@ -634,6 +806,7 @@ def cmd_extract(args):
     
     if not blocks:
         print_colored("未找到 FIUP 补丁块", "yellow")
+        print_colored("提示: v3.0 格式使用 <<<FIUP>>> 和 <<<END>>> 标记", "gray")
         return 1
     
     print_colored(f"提取到 {len(blocks)} 个补丁块", "green")
@@ -726,9 +899,9 @@ def cmd_diff(args):
 def main():
     parser = argparse.ArgumentParser(
         prog='fiup',
-        description="FIUP Tool v2.0 - 文件增量更新协议工具",
+        description="FIUP Tool v3.0 - 文件增量更新协议工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog=f"""
 快捷用法:
   fiup -t ./file.py                   从stdin应用补丁
   fiup -c -t ./project                从剪贴板应用
@@ -740,6 +913,11 @@ def main():
   cat response.txt | fiup -t ./src
   fiup apply patch.fiup -t ./project -v
   fiup extract chat.md -o patches.fiup
+
+v3.0 格式:
+  - 使用 {INDENT_CHAR} 表示缩进（{INDENT_CHAR} = {INDENT_SIZE}空格）
+  - 支持 ```fiup 代码块包裹
+  - 操作: REPLACE, INSERT_AFTER, INSERT_BEFORE, DELETE, CREATE
         """
     )
     

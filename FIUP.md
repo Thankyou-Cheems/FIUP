@@ -1,228 +1,390 @@
-# FIUP 文件增量更新协议 v2.0
+# FIUP - File Incremental Update Protocol v3.0
 
-基于文本锚点的代码修改协议。**核心原则：使用唯一文本定位，禁止依赖行号。**
+## Overview
 
----
+FIUP (File Incremental Update Protocol) is a text-based patch format designed for LLM code modification. It uses **unique text anchors** instead of line numbers, and **visible indentation characters** instead of whitespace.
 
-## 补丁格式
+## Core Principles
 
-<<<FIUP_PATCH file="路径/文件名.ext">>>
-[OPERATION]: REPLACE | INSERT_AFTER | INSERT_BEFORE | DELETE
+1. **Anchor-based positioning**: Use unique code snippets (3-6 lines) to locate modification points
+2. **Visible indentation**: Use `→` character to represent indentation units (no counting required)
+3. **Code block wrapper**: Wrap entire patch in ` ```fiup ` block for format preservation
+4. **Flat structure**: No nested code blocks inside patches
+5. **One patch per block**: Each `<<<FIUP>>>...<<<END>>>` contains exactly one operation
 
-<<<ANCHOR>>>
-<从原文件精确复制的唯一代码片段，建议3-6行>
-<<<END_ANCHOR>>>
+## Syntax Specification
 
-<<<CONTENT>>>
-<新代码，DELETE操作可省略整个CONTENT块>
-<<<END_CONTENT>>>
-<<<END_FIUP_PATCH>>>
+### Patch Block Structure
 
----
+IMPORTANT: Always wrap the entire patch in a `fiup` code block:
 
-## 操作类型详解
+````
+```fiup
+<<<FIUP>>>
+[FILE]: <filepath>
+[OP]: <operation_type>
+[ANCHOR]
+line1
+→indented_line2
+→→more_indented_line3
+[CONTENT]
+line1
+→indented_line2
+→→more_indented_line3
+<<<END>>>
+```
+````
 
-| 操作 | 场景 | 锚点要求 | 内容要求 |
-|:---|:---|:---|:---|
-| **REPLACE** | 修改现有代码 | 要被替换的旧代码 | 替换后的新代码 |
-| **INSERT_AFTER** | 在某位置后添加 | 插入点之前的代码（会保留） | 仅新增代码，不重复锚点 |
-| **INSERT_BEFORE** | 在某位置前添加 | 插入点之后的代码（会保留） | 仅新增代码，不重复锚点 |
-| **DELETE** | 删除代码块 | 要删除的代码 | 省略CONTENT块 |
+### Indentation Marker
 
-**选择建议：**
-- 修改逻辑 → REPLACE
-- 添加 import/新函数 → INSERT_AFTER
-- 添加装饰器/注释 → INSERT_BEFORE
-- 移除废弃代码 → DELETE
+Use `→` at the start of each line to indicate indentation:
 
----
+- No `→` = no indentation (column 0)
+- `→` = 1 indent unit (4 spaces or 1 tab)
+- `→→` = 2 indent units (8 spaces)
+- `→→→` = 3 indent units (12 spaces)
+- `→→→→` = 4 indent units (16 spaces)
 
-## 锚点选择原则 (S.U.R.E)
+**Rules**:
+- One `→` equals one indentation unit (typically 4 spaces)
+- Place `→` only at the START of lines, not within code
+- Lines with no indentation have no `→` prefix
+- Copy the indentation structure from original code, replacing spaces/tabs with `→`
 
-### S - Significant (显著性)
-锚点必须包含有特征的代码，禁止仅含通用语句。
+### Operation Types
 
-### U - Unique (唯一性)
-锚点在目标文件中**必须只出现一次**。若不确定，扩展上下文。
+| Operation | Description | ANCHOR | CONTENT |
+|-----------|-------------|--------|---------|
+| `REPLACE` | Replace anchor with content | Code to replace | New code |
+| `INSERT_AFTER` | Insert after anchor | Locator (preserved) | New code to insert |
+| `INSERT_BEFORE` | Insert before anchor | Locator (preserved) | New code to insert |
+| `DELETE` | Delete anchor | Code to delete | Omit entirely |
+| `CREATE` | Create new file | Omit entirely | Full file content |
 
-### R - Robust (鲁棒性)
-包含 3-6 行代码，含函数签名、类名、特殊注释等特征文本。
+### Section Markers
 
-### E - Exact (精确性)
-从原文件逐字复制，保持缩进，禁止使用 ... 或 # ... 等占位符。
+- `[FILE]:` - Target file path (relative to project root)
+- `[OP]:` - Operation type
+- `[ANCHOR]` - Start of anchor section (code to locate)
+- `[CONTENT]` - Start of content section (new code)
 
----
+## Examples
 
-## 锚点示例
+### Example 1: REPLACE
 
-### ❌ 错误示范
+Replace a function implementation:
 
-太短，可能不唯一：
-<<<ANCHOR>>>
-return True
-<<<END_ANCHOR>>>
+````
+```fiup
+<<<FIUP>>>
+[FILE]: src/utils.py
+[OP]: REPLACE
+[ANCHOR]
+def calculate_sum(a, b):
+→result = a + b
+→return result
+[CONTENT]
+def calculate_sum(numbers: list[int]) -> int:
+→"""Calculate sum of a list of numbers."""
+→if not numbers:
+→→return 0
+→return sum(numbers)
+<<<END>>>
+```
+````
 
-纯通用代码：
-<<<ANCHOR>>>
-def __init__(self):
-    pass
-<<<END_ANCHOR>>>
+### Example 2: INSERT_AFTER
 
-含占位符（工具无法识别）：
-<<<ANCHOR>>>
-def process():
-    ...
-    return result
-<<<END_ANCHOR>>>
+Add a new method after an existing one:
 
-纯符号行：
-<<<ANCHOR>>>
-    }
-<<<END_ANCHOR>>>
+````
+```fiup
+<<<FIUP>>>
+[FILE]: src/user.py
+[OP]: INSERT_AFTER
+[ANCHOR]
+→def get_name(self):
+→→return self.name
+[CONTENT]
 
-### ✅ 正确示范
+→def get_email(self):
+→→"""Return user email."""
+→→return self.email
+<<<END>>>
+```
+````
 
-含函数签名 + docstring + 开头逻辑：
-<<<ANCHOR>>>
-def calculate_price(item, quantity, discount=0):
-    """Calculate the final price with discount."""
-    base_price = item.price * quantity
-<<<END_ANCHOR>>>
+### Example 3: INSERT_BEFORE
 
-含类名上下文：
-<<<ANCHOR>>>
-class OrderProcessor:
-    def __init__(self, db_connection):
-        self.db = db_connection
-        self.cache = {}
-<<<END_ANCHOR>>>
+Add imports before existing code:
 
-含特殊注释/标识：
-<<<ANCHOR>>>
-# === AUTHENTICATION LOGIC ===
-def verify_token(token: str) -> bool:
-    if not token:
-        return False
-<<<END_ANCHOR>>>
-
----
-
-## 完整示例
-
-### 示例1：添加 import（INSERT_AFTER）
-
-<<<FIUP_PATCH file="main.py">>>
-[OPERATION]: INSERT_AFTER
-
-<<<ANCHOR>>>
-import os
-import sys
-from pathlib import Path
-<<<END_ANCHOR>>>
-
-<<<CONTENT>>>
-import logging
-import json
+````
+```fiup
+<<<FIUP>>>
+[FILE]: main.py
+[OP]: INSERT_BEFORE
+[ANCHOR]
+class Application:
+→def __init__(self):
+[CONTENT]
 from typing import Optional
-<<<END_CONTENT>>>
-<<<END_FIUP_PATCH>>>
+from dataclasses import dataclass
 
-### 示例2：修改函数（REPLACE）
+<<<END>>>
+```
+````
 
-<<<FIUP_PATCH file="utils.py">>>
-[OPERATION]: REPLACE
+### Example 4: DELETE
 
-<<<ANCHOR>>>
-def process_data(data):
-    """Process raw data."""
-    result = data.strip()
-    return result
-<<<END_ANCHOR>>>
+Remove a function:
 
-<<<CONTENT>>>
-def process_data(data: str, validate: bool = True) -> dict:
-    """Process raw data with optional validation."""
-    if validate and not data:
-        raise ValueError("Empty data")
-    result = data.strip()
-    return {"data": result, "length": len(result)}
-<<<END_CONTENT>>>
-<<<END_FIUP_PATCH>>>
+````
+```fiup
+<<<FIUP>>>
+[FILE]: legacy.py
+[OP]: DELETE
+[ANCHOR]
+def deprecated_function():
+→"""This function is no longer needed."""
+→pass
+<<<END>>>
+```
+````
 
-### 示例3：删除代码（DELETE）
+### Example 5: CREATE
 
-<<<FIUP_PATCH file="legacy.py">>>
-[OPERATION]: DELETE
+Create a new file:
 
-<<<ANCHOR>>>
-# DEPRECATED: Remove after v2.0
-def old_handler(request):
-    """This function is deprecated."""
-    return legacy_process(request)
-<<<END_ANCHOR>>>
-<<<END_FIUP_PATCH>>>
+````
+```fiup
+<<<FIUP>>>
+[FILE]: src/new_module.py
+[OP]: CREATE
+[CONTENT]
+"""New module for handling data processing."""
 
-### 示例4：多补丁同文件
+from typing import List
 
-<<<FIUP_PATCH file="service.py">>>
-[OPERATION]: INSERT_AFTER
 
-<<<ANCHOR>>>
-import requests
-from config import API_URL
-<<<END_ANCHOR>>>
+class DataProcessor:
+→def __init__(self, data: List[str]):
+→→self.data = data
 
-<<<CONTENT>>>
-from utils import retry_decorator
-<<<END_CONTENT>>>
-<<<END_FIUP_PATCH>>>
+→def process(self) -> List[str]:
+→→return [item.strip() for item in self.data]
+<<<END>>>
+```
+````
 
-<<<FIUP_PATCH file="service.py">>>
-[OPERATION]: REPLACE
+### Example 6: Deeply Nested Code
 
-<<<ANCHOR>>>
-def fetch_data(endpoint):
-    response = requests.get(f"{API_URL}/{endpoint}")
-    return response.json()
-<<<END_ANCHOR>>>
+For deeply nested code, simply add more `→`:
 
-<<<CONTENT>>>
-@retry_decorator(max_attempts=3)
-def fetch_data(endpoint: str) -> dict:
-    """Fetch data from API with retry logic."""
-    response = requests.get(f"{API_URL}/{endpoint}")
-    response.raise_for_status()
-    return response.json()
-<<<END_CONTENT>>>
-<<<END_FIUP_PATCH>>>
+````
+```fiup
+<<<FIUP>>>
+[FILE]: src/parser.py
+[OP]: REPLACE
+[ANCHOR]
+→→→if token.type == "STRING":
+→→→→value = token.value
+→→→→return StringNode(value)
+[CONTENT]
+→→→if token.type == "STRING":
+→→→→value = self.parse_string(token.value)
+→→→→node = StringNode(value)
+→→→→node.line = token.line
+→→→→return node
+<<<END>>>
+```
+````
 
----
+### Example 7: Multiple Patches
 
-## 生成前检查清单
+When multiple modifications are needed, you can use separate code blocks or combine in one:
 
-1. **定位**：确认要修改的确切代码位置
-2. **唯一性验证**：自问"这个锚点在文件中只出现一次吗？"
-3. **扩展检查**：若锚点可能不唯一，向上/下扩展几行
-4. **缩进核对**：确保锚点和内容的缩进与原文件一致
-5. **格式检查**：确认使用了正确的标记
+**Option A: Separate blocks (recommended for clarity)**
 
----
+````
+```fiup
+<<<FIUP>>>
+[FILE]: config.py
+[OP]: REPLACE
+[ANCHOR]
+DEBUG = True
+[CONTENT]
+DEBUG = False
+<<<END>>>
+```
+````
 
-### 对于 ChatGPT / Gemini
+````
+```fiup
+<<<FIUP>>>
+[FILE]: config.py
+[OP]: INSERT_AFTER
+[ANCHOR]
+DEBUG = False
+[CONTENT]
+LOG_LEVEL = "INFO"
+<<<END>>>
+```
+````
 
-【强制要求】代码修改必须使用 FIUP 格式，不可简化或省略任何部分：
-1. <<<ANCHOR>>> 必须包含从原文件精确复制的 3-6 行代码（非位置描述）
-2. 每个标记（<<<FIUP_PATCH>>>, [OPERATION], <<<ANCHOR>>>, <<<CONTENT>>> 等）必须完整输出
-3. 输出前自检：包含完整结构且 <<<ANCHOR>>> 内是可执行代码
+**Option B: Combined in one block**
 
----
+````
+```fiup
+<<<FIUP>>>
+[FILE]: config.py
+[OP]: REPLACE
+[ANCHOR]
+DEBUG = True
+[CONTENT]
+DEBUG = False
+<<<END>>>
 
-## 关键注意事项
+<<<FIUP>>>
+[FILE]: config.py
+[OP]: INSERT_AFTER
+[ANCHOR]
+DEBUG = False
+[CONTENT]
+LOG_LEVEL = "INFO"
+<<<END>>>
+```
+````
 
-1. **缩进敏感**：Python/YAML 等语言的缩进必须精确匹配
-2. **不要重复锚点**：INSERT_AFTER/BEFORE 的内容中不包含锚点代码
-3. **顺序依赖**：多补丁按顺序应用，后续锚点应基于已修改的文件状态
-4. **直接输出**：FIUP 块直接输出，不要嵌套在其他 markdown 代码围栏内
-5. **完整复制**：锚点必须是原文件的精确子串，不可自行修改或"美化"
-6. **禁止省略格式标记**：每个补丁必须包含完整的 <<<FIUP_PATCH>>>, [OPERATION], <<<ANCHOR>>>, <<<END_ANCHOR>>>, <<<CONTENT>>>, <<<END_CONTENT>>>, <<<END_FIUP_PATCH>>> 结构（DELETE 操作可省略 CONTENT 块）
-7. **锚点必须是代码**：<<<ANCHOR>>> 块内必须是从原文件复制的实际代码，不可用自然语言描述（如"在函数 X 处"）
+## Anchor Guidelines
+
+### Anchor Selection Rules
+
+1. **Uniqueness**: Anchor must appear exactly ONCE in the target file
+2. **Length**: 3-6 lines recommended for reliable matching
+3. **Context**: Include distinctive elements (function signatures, unique comments, specific variable names)
+4. **Avoid**: Generic code that may repeat (bare `return`, `pass`, `}`, etc.)
+
+### Good Anchor Examples
+
+````
+```fiup
+[ANCHOR]
+def process_user_data(user_id: str, options: dict):
+→"""Process user data with given options."""
+→logger.info(f"Processing user {user_id}")
+```
+````
+
+````
+```fiup
+[ANCHOR]
+→# SECTION: Database Configuration
+→DB_HOST = "localhost"
+→DB_PORT = 5432
+```
+````
+
+### Bad Anchor Examples
+
+```
+[ANCHOR]
+→return result
+```
+(Too generic, likely appears multiple times)
+
+```
+[ANCHOR]
+import os
+```
+(Common import, may not be unique)
+
+## Special Cases
+
+### Blank Lines
+
+Blank lines are written as empty lines (no `→` needed):
+
+````
+```fiup
+[CONTENT]
+def func_a():
+→pass
+
+
+def func_b():
+→pass
+```
+````
+
+### Code Containing → Character
+
+If the actual code contains `→` character, escape it as `\→`:
+
+````
+```fiup
+[CONTENT]
+→print("Arrow: \→")
+```
+````
+
+### Mixed Indentation Detection
+
+The tool automatically detects whether the target file uses tabs or spaces:
+- If file uses tabs: each `→` becomes 1 tab
+- If file uses spaces: each `→` becomes 4 spaces (configurable)
+
+## For LLMs: Quick Rules
+
+1. **Wrap in code block**: Always use ` ```fiup ` and ` ``` `
+2. **Start with `<<<FIUP>>>`**, end with **`<<<END>>>`**
+3. **[FILE]:** specify the file path
+4. **[OP]:** use REPLACE, INSERT_AFTER, INSERT_BEFORE, DELETE, or CREATE
+5. **[ANCHOR]:** copy the target code exactly, replacing leading spaces with `→`
+6. **[CONTENT]:** write new code, using `→` for each indentation level
+7. **One `→` = one indent level** (don't count, just match the visual nesting)
+
+## Why This Format?
+
+### Problem with Plain Indentation
+Web chat interfaces collapse multiple spaces into one, breaking indentation-based formats.
+
+### Problem with Nested Code Blocks
+Using ` ``` ` inside ` ``` ` causes parsing issues and confuses many LLMs.
+
+### FIUP v3.0 Solution
+- **Outer ` ```fiup ` block**: Preserves formatting in markdown-enabled interfaces
+- **`→` markers**: Visible indentation that survives even if code block fails
+- **Flat structure**: No nesting, easy for all LLMs to generate correctly
+
+## Protocol Metadata
+
+- **Version**: 3.0
+- **Created**: 2025
+- **License**: MIT
+- **Repository**: https://github.com/Thankyou-Cheems/FIUP
+
+## Quick Reference Card
+
+````
+```fiup
+<<<FIUP>>>
+[FILE]: path/to/file.ext
+[OP]: REPLACE | INSERT_AFTER | INSERT_BEFORE | DELETE | CREATE
+[ANCHOR]
+code_at_column_0
+→indented_once
+→→indented_twice
+[CONTENT]
+new_code_at_column_0
+→new_indented_once
+→→new_indented_twice
+→→→new_indented_three_times
+<<<END>>>
+```
+````
+
+**Remember**: 
+- Always wrap in ` ```fiup ` code block
+- `→` = one indentation level
+- No `→` = no indentation
+- Just match the visual structure, no counting needed

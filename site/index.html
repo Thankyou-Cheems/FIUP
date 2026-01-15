@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FIUP Tool - 文件增量更新协议</title>
+  <title>FIUP Tool v3.0 - 文件增量更新协议</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -47,6 +47,7 @@
     const Icons = {
       Upload: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
       FileText: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>,
+      FilePlus: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>,
       Play: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>,
       Eye: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
       CheckCircle: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
@@ -62,21 +63,104 @@
       Download: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
     };
 
-    // FIUP v2.0 解析器
+    // 缩进配置
+    const INDENT_CHAR = '→';
+    const INDENT_SIZE = 4; // 每个 → 转换为4个空格
+
+    // 将 → 转换为实际缩进（空格）
+    const convertIndent = (text, indentUnit = '    ') => {
+      if (!text) return text;
+      return text.split('\n').map(line => {
+        let indentCount = 0;
+        let i = 0;
+        while (i < line.length && line[i] === INDENT_CHAR) {
+          indentCount++;
+          i++;
+        }
+        const rest = line.slice(i);
+        // 处理转义的箭头 \→
+        const unescaped = rest.replace(/\\→/g, INDENT_CHAR);
+        return indentUnit.repeat(indentCount) + unescaped;
+      }).join('\n');
+    };
+
+    // 将实际缩进转换为 → （用于显示）
+    const toVisibleIndent = (text, indentUnit = '    ') => {
+      if (!text) return text;
+      return text.split('\n').map(line => {
+        let indentCount = 0;
+        let pos = 0;
+        // 检测空格缩进
+        while (pos < line.length) {
+          if (line.slice(pos, pos + indentUnit.length) === indentUnit) {
+            indentCount++;
+            pos += indentUnit.length;
+          } else if (line[pos] === '\t') {
+            indentCount++;
+            pos++;
+          } else {
+            break;
+          }
+        }
+        return INDENT_CHAR.repeat(indentCount) + line.slice(pos);
+      }).join('\n');
+    };
+
+    // FIUP v3.0 解析器
     const parseFIUP = (text) => {
-      const pattern = /<<<FIUP_PATCH\s+file="([^"]+)">>>\s*\[OPERATION\]:\s*(REPLACE|INSERT_AFTER|INSERT_BEFORE|DELETE)\s*<<<ANCHOR>>>\n([\s\S]*?)<<<END_ANCHOR>>>\s*(?:<<<CONTENT>>>\n([\s\S]*?)<<<END_CONTENT>>>\s*)?<<<END_FIUP_PATCH>>>/g;
-      
-      const patches = [];
+      // 先移除 ```fiup 代码块包裹
+      let content = text;
+      // 匹配 ```fiup ... ``` 或 ``` ... ```
+      const codeBlockPattern = /```(?:fiup)?\s*\n([\s\S]*?)```/g;
+      let extracted = '';
       let match;
+      while ((match = codeBlockPattern.exec(text)) !== null) {
+        extracted += match[1] + '\n';
+      }
+      // 如果找到了代码块，使用提取的内容；否则使用原始内容
+      if (extracted) {
+        content = extracted;
+      }
       
-      while ((match = pattern.exec(text)) !== null) {
+      // 解析 FIUP 块
+      const patches = [];
+      const blockPattern = /<<<FIUP>>>([\s\S]*?)<<<END>>>/g;
+      
+      while ((match = blockPattern.exec(content)) !== null) {
+        const block = match[0];
+        const inner = match[1];
+        
+        // 解析 [FILE]:
+        const fileMatch = inner.match(/\[FILE\]:\s*(.+?)(?:\n|$)/);
+        const file = fileMatch ? fileMatch[1].trim() : '';
+        
+        // 解析 [OP]:
+        const opMatch = inner.match(/\[OP\]:\s*(REPLACE|INSERT_AFTER|INSERT_BEFORE|DELETE|CREATE)(?:\n|$)/i);
+        const operation = opMatch ? opMatch[1].toUpperCase() : '';
+        
+        // 解析 [ANCHOR] 和 [CONTENT] 部分
+        let anchor = '';
+        let contentText = '';
+        
+        const anchorMatch = inner.match(/\[ANCHOR\]\s*\n([\s\S]*?)(?=\[CONTENT\]|$)/);
+        if (anchorMatch) {
+          anchor = anchorMatch[1].replace(/\n$/, '');
+        }
+        
+        const contentMatch = inner.match(/\[CONTENT\]\s*\n([\s\S]*?)$/);
+        if (contentMatch) {
+          contentText = contentMatch[1].replace(/\n$/, '');
+        }
+        
         patches.push({
           id: crypto.randomUUID(),
-          file: match[1],
-          operation: match[2],
-          anchor: match[3].replace(/\n$/, ''),
-          content: match[4] ? match[4].replace(/\n$/, '') : '',
-          raw: match[0]
+          file,
+          operation,
+          anchor,      // 保留原始的 → 格式用于显示
+          content: contentText,
+          anchorReal: convertIndent(anchor),    // 转换后的实际代码
+          contentReal: convertIndent(contentText),
+          raw: block
         });
       }
       
@@ -88,25 +172,48 @@
       const warnings = [];
       
       if (!patch.file) errors.push('文件路径为空');
-      if (!patch.anchor?.trim()) errors.push('锚点内容为空');
       
-      const anchorLines = patch.anchor?.trim().split('\n').length || 0;
-      if (anchorLines < 2) warnings.push(`锚点仅 ${anchorLines} 行，建议 3-6 行`);
-      
-      if (patch.operation !== 'DELETE' && !patch.content?.trim()) {
-        errors.push('非 DELETE 操作但内容为空');
+      if (patch.operation === 'CREATE') {
+        if (!patch.content?.trim()) {
+          errors.push('CREATE 操作但内容为空');
+        }
+      } else {
+        if (!patch.anchor?.trim()) errors.push('锚点内容为空');
+        
+        const anchorLines = patch.anchor?.trim().split('\n').length || 0;
+        if (anchorLines < 2) warnings.push(`锚点仅 ${anchorLines} 行，建议 3-6 行`);
+        
+        if (patch.operation !== 'DELETE' && !patch.content?.trim()) {
+          errors.push('非 DELETE/CREATE 操作但内容为空');
+        }
       }
       
       if (patch.anchor?.includes('...') || patch.anchor?.includes('# ...')) {
         warnings.push('锚点中包含 "..."，可能导致匹配失败');
       }
       
+      // 检查是否有未转换的缩进
+      const hasArrow = patch.anchor?.includes(INDENT_CHAR) || patch.content?.includes(INDENT_CHAR);
+      if (hasArrow) {
+        // 这是正常的，v3.0 使用 → 表示缩进
+      }
+      
       return { valid: errors.length === 0, errors, warnings };
     };
 
     const simulateApply = (content, patch) => {
+      // CREATE 操作特殊处理
+      if (patch.operation === 'CREATE') {
+        return { 
+          success: true, 
+          message: '新建文件', 
+          result: patch.contentReal,
+          isCreate: true
+        };
+      }
+      
       const normalizedContent = content.replace(/\r\n/g, '\n');
-      const normalizedAnchor = patch.anchor.replace(/\r\n/g, '\n');
+      const normalizedAnchor = patch.anchorReal.replace(/\r\n/g, '\n');
       
       const pos = normalizedContent.indexOf(normalizedAnchor);
       if (pos === -1) {
@@ -124,15 +231,15 @@
       
       switch (patch.operation) {
         case 'REPLACE':
-          result = before + patch.content + after;
+          result = before + patch.contentReal + after;
           break;
         case 'INSERT_AFTER':
           const sep1 = normalizedAnchor.endsWith('\n') ? '' : '\n';
-          result = before + normalizedAnchor + sep1 + patch.content + after;
+          result = before + normalizedAnchor + sep1 + patch.contentReal + after;
           break;
         case 'INSERT_BEFORE':
-          const sep2 = patch.content.endsWith('\n') ? '' : '\n';
-          result = before + patch.content + sep2 + normalizedAnchor + after;
+          const sep2 = patch.contentReal.endsWith('\n') ? '' : '\n';
+          result = before + patch.contentReal + sep2 + normalizedAnchor + after;
           break;
         case 'DELETE':
           result = before + after;
@@ -149,16 +256,20 @@
       REPLACE: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/30' },
       INSERT_AFTER: { bg: 'bg-green-500/10', text: 'text-green-400', border: 'border-green-500/30' },
       INSERT_BEFORE: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/30' },
-      DELETE: { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/30' }
+      DELETE: { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/30' },
+      CREATE: { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/30' }
     };
 
     const PatchCard = ({ patch, index, expanded, onToggle, onDelete, fileContent }) => {
       const validation = useMemo(() => validatePatch(patch), [patch]);
-      const applyResult = useMemo(() => 
-        fileContent ? simulateApply(fileContent, patch) : null
-      , [fileContent, patch]);
+      const applyResult = useMemo(() => {
+        if (patch.operation === 'CREATE') {
+          return simulateApply('', patch);
+        }
+        return fileContent ? simulateApply(fileContent, patch) : null;
+      }, [fileContent, patch]);
       
-      const color = opColors[patch.operation];
+      const color = opColors[patch.operation] || opColors.REPLACE;
       
       return (
         <div className={`rounded-xl border ${color.border} ${color.bg} overflow-hidden transition-all duration-200`}>
@@ -225,21 +336,42 @@
                 </div>
               )}
               
-              <div>
-                <div className="text-xs text-gray-500 mb-1.5 font-medium">锚点 ANCHOR</div>
-                <pre className="bg-black/30 rounded-lg p-3 text-sm text-gray-300 overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
-                  {patch.anchor}
-                </pre>
-              </div>
+              {patch.operation !== 'CREATE' && (
+                <div>
+                  <div className="text-xs text-gray-500 mb-1.5 font-medium flex items-center gap-2">
+                    ANCHOR
+                    <span className="text-gray-600 font-normal">（→ = 缩进）</span>
+                  </div>
+                  <pre className="bg-black/30 rounded-lg p-3 text-sm text-gray-300 overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
+                    {patch.anchor}
+                  </pre>
+                </div>
+              )}
               
               {patch.content && (
                 <div>
-                  <div className="text-xs text-gray-500 mb-1.5 font-medium">内容 CONTENT</div>
+                  <div className="text-xs text-gray-500 mb-1.5 font-medium flex items-center gap-2">
+                    CONTENT
+                    <span className="text-gray-600 font-normal">（→ = 缩进）</span>
+                  </div>
                   <pre className="bg-black/30 rounded-lg p-3 text-sm text-green-300 overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
                     {patch.content}
                   </pre>
                 </div>
               )}
+              
+              {/* 显示转换后的实际代码预览 */}
+              <details className="text-xs">
+                <summary className="text-gray-500 cursor-pointer hover:text-gray-400">查看实际代码（缩进已转换）</summary>
+                <div className="mt-2 space-y-2">
+                  {patch.operation !== 'CREATE' && patch.anchorReal && (
+                    <pre className="bg-black/50 rounded p-2 text-gray-400 overflow-x-auto whitespace-pre">{patch.anchorReal}</pre>
+                  )}
+                  {patch.contentReal && (
+                    <pre className="bg-black/50 rounded p-2 text-green-400/70 overflow-x-auto whitespace-pre">{patch.contentReal}</pre>
+                  )}
+                </div>
+              </details>
             </div>
           )}
         </div>
@@ -248,9 +380,9 @@
 
     const DiffView = ({ original, modified }) => {
       const diff = useMemo(() => {
-        if (!original || !modified) return [];
-        const oldLines = original.split('\n');
-        const newLines = modified.split('\n');
+        if (!original && !modified) return [];
+        const oldLines = (original || '').split('\n');
+        const newLines = (modified || '').split('\n');
         const result = [];
         
         let i = 0, j = 0;
@@ -434,6 +566,17 @@
         setPreviewFile({ name: fileName, original: originalContent, modified: content, needsRefresh: false });
       }, [patches, files]);
 
+      // 处理 CREATE 操作的预览
+      const handlePreviewCreate = useCallback((patch) => {
+        setPreviewFile({ 
+          name: patch.file, 
+          original: '', 
+          modified: patch.contentReal, 
+          needsRefresh: false,
+          isCreate: true
+        });
+      }, []);
+
       React.useEffect(() => {
         if (previewFile?.needsRefresh && previewFile.name) {
           handlePreview(previewFile.name);
@@ -442,6 +585,21 @@
 
       const handleApplyAndDownload = useCallback((fileName) => {
         const filePatches = patches.filter(p => p.file === fileName || p.file.endsWith('/' + fileName));
+        
+        // 检查是否是 CREATE 操作
+        const createPatch = filePatches.find(p => p.operation === 'CREATE');
+        if (createPatch) {
+          const blob = new Blob([createPatch.contentReal], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName.split('/').pop();
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast(`已创建并导出: ${fileName}`, 'success');
+          return;
+        }
+        
         const originalContent = files[fileName] || files[Object.keys(files).find(f => fileName.endsWith(f))] || '';
         
         if (!originalContent) {
@@ -487,20 +645,27 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = previewFile.name;
+        a.download = previewFile.name.split('/').pop();
         a.click();
         URL.revokeObjectURL(url);
         showToast(`已导出: ${previewFile.name}`, 'success');
       }, [previewFile]);
       
       const stats = useMemo(() => {
-        const byOp = { REPLACE: 0, INSERT_AFTER: 0, INSERT_BEFORE: 0, DELETE: 0 };
+        const byOp = { REPLACE: 0, INSERT_AFTER: 0, INSERT_BEFORE: 0, DELETE: 0, CREATE: 0 };
         const byFile = {};
         patches.forEach(p => {
-          byOp[p.operation]++;
+          if (byOp.hasOwnProperty(p.operation)) {
+            byOp[p.operation]++;
+          }
           byFile[p.file] = (byFile[p.file] || 0) + 1;
         });
         return { byOp, byFile, total: patches.length };
+      }, [patches]);
+
+      // 获取需要创建的新文件列表
+      const createFiles = useMemo(() => {
+        return patches.filter(p => p.operation === 'CREATE').map(p => p.file);
       }, [patches]);
 
       return (
@@ -530,11 +695,12 @@
                 </div>
                 <div>
                   <h1 className="text-lg font-semibold">FIUP Tool</h1>
-                  <p className="text-xs text-gray-500 hidden sm:block">文件增量更新协议 FIUP 在线工具 v2.0</p>
+                  <p className="text-xs text-gray-500 hidden sm:block">文件增量更新协议 v3.0 · 可见缩进标记</p>
                 </div>
               </div>
               
               <div className="flex items-center gap-3">
+                <span className="text-xs px-2 py-1 rounded bg-violet-500/20 text-violet-300 font-mono">→ = indent</span>
                 <a 
                   href="https://github.com/Thankyou-Cheems/FIUP" 
                   target="_blank"
@@ -642,11 +808,35 @@
                     </div>
                   </div>
 
+                  {/* CREATE 操作的新文件 */}
+                  {createFiles.length > 0 && (
+                    <div className="bg-purple-500/10 rounded-xl border border-purple-500/30 overflow-hidden">
+                      <div className="px-4 py-3 border-b border-purple-500/20">
+                        <h3 className="text-sm font-medium text-purple-300 flex items-center gap-2">
+                          <Icons.FilePlus />
+                          新建文件 ({createFiles.length})
+                        </h3>
+                      </div>
+                      <div className="p-2 space-y-1">
+                        {createFiles.map(fileName => (
+                          <button
+                            key={fileName}
+                            onClick={() => handleApplyAndDownload(fileName)}
+                            className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors text-left"
+                          >
+                            <Icons.Download />
+                            <span className="text-xs text-purple-300 font-mono truncate">{fileName}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {patches.length > 0 && Object.keys(files).length > 0 && (
                     <div className="bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 rounded-xl border border-violet-500/20 p-3">
                       <div className="text-xs font-medium text-gray-400 mb-2">一键应用并下载</div>
                       <div className="space-y-1">
-                        {[...new Set(patches.map(p => p.file))].map(fileName => {
+                        {[...new Set(patches.filter(p => p.operation !== 'CREATE').map(p => p.file))].map(fileName => {
                           const shortName = fileName.split('/').pop();
                           const hasFile = Object.keys(files).some(f => fileName === f || fileName.endsWith('/' + f));
                           if (!hasFile) return null;
@@ -693,7 +883,7 @@
             {activeTab === 'input' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-4">
-                  <h2 className="text-lg font-medium">输入 FIUP 补丁</h2>
+                  <h2 className="text-lg font-medium">输入 FIUP v3.0 补丁</h2>
                   <button
                     onClick={handleParse}
                     disabled={!patchText.trim()}
@@ -707,29 +897,35 @@
                 <textarea
                   value={patchText}
                   onChange={(e) => setPatchText(e.target.value)}
-                  placeholder={`粘贴 FIUP 补丁内容...
+                  placeholder={`粘贴 FIUP v3.0 补丁内容...
 
-示例格式:
-<<<FIUP_PATCH file="example.py">>>
-[OPERATION]: REPLACE
+格式示例（使用 → 表示缩进）:
 
-<<<ANCHOR>>>
+\`\`\`fiup
+<<<FIUP>>>
+[FILE]: src/example.py
+[OP]: REPLACE
+[ANCHOR]
 def old_function():
-    pass
-<<<END_ANCHOR>>>
+→print("hello")
+→return None
+[CONTENT]
+def new_function(name: str):
+→"""Greet someone."""
+→print(f"Hello, {name}!")
+→return {"greeted": name}
+<<<END>>>
+\`\`\`
 
-<<<CONTENT>>>
-def new_function():
-    return "Hello"
-<<<END_CONTENT>>>
-<<<END_FIUP_PATCH>>>`}
+支持的操作: REPLACE, INSERT_AFTER, INSERT_BEFORE, DELETE, CREATE
+缩进规则: → = 4个空格（一级缩进），→→ = 8个空格，以此类推`}
                   className="w-full h-80 sm:h-96 bg-gray-900/50 border border-gray-700/50 rounded-xl p-4 font-mono text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 resize-none"
                 />
                 
                 <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
                   <span>✓ 从 AI 对话粘贴</span>
-                  <span>✓ 自动识别多补丁</span>
-                  <span>✓ 拖拽文件到页面任意位置上传</span>
+                  <span>✓ 自动识别 ```fiup 代码块</span>
+                  <span>✓ → 可见缩进标记</span>
                 </div>
               </div>
             )}
@@ -741,7 +937,7 @@ def new_function():
                     <div className="flex items-center gap-4 sm:gap-6 flex-1 flex-wrap">
                       {Object.entries(stats.byOp).map(([op, count]) => count > 0 && (
                         <div key={op} className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${opColors[op].text.replace('text-', 'bg-')}`} />
+                          <span className={`w-2 h-2 rounded-full ${opColors[op]?.text.replace('text-', 'bg-') || 'bg-gray-500'}`} />
                           <span className="text-sm text-gray-400">{op}</span>
                           <span className="text-sm font-medium">{count}</span>
                         </div>
@@ -762,7 +958,7 @@ def new_function():
                     <div className="text-center py-16 text-gray-500">
                       <div className="mx-auto mb-4 opacity-30"><Icons.Code size={48} /></div>
                       <p>暂无补丁</p>
-                      <p className="text-sm mt-1">在"输入补丁"标签页粘贴 FIUP 内容</p>
+                      <p className="text-sm mt-1">在"输入补丁"标签页粘贴 FIUP v3.0 内容</p>
                     </div>
                   ) : (
                     patches.map((patch, index) => (
@@ -797,36 +993,54 @@ def new_function():
                 </div>
                 
                 <div className="flex flex-wrap gap-2">
-                  {Object.keys(files).length === 0 ? (
+                  {Object.keys(files).length === 0 && createFiles.length === 0 ? (
                     <div className="w-full text-center py-8 border-2 border-dashed border-gray-700 rounded-xl">
                       <p className="text-gray-400">请先在左侧上传源文件</p>
-                      <p className="text-gray-600 text-sm mt-1">支持拖拽到页面任意位置</p>
+                      <p className="text-gray-600 text-sm mt-1">或解析包含 CREATE 操作的补丁</p>
                     </div>
                   ) : (
-                    Object.keys(files).map(name => {
-                      const patchCount = patches.filter(p => 
-                        p.file === name || p.file.endsWith('/' + name)
-                      ).length;
-                      return (
+                    <>
+                      {Object.keys(files).map(name => {
+                        const patchCount = patches.filter(p => 
+                          p.file === name || p.file.endsWith('/' + name)
+                        ).length;
+                        return (
+                          <button
+                            key={name}
+                            onClick={() => handlePreview(name)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+                              previewFile?.name === name
+                                ? 'bg-violet-500/20 border-violet-500/50 text-violet-300'
+                                : 'bg-gray-800/50 border-gray-700/50 hover:border-gray-600'
+                            }`}
+                          >
+                            <Icons.FileText />
+                            <span className="text-sm">{name}</span>
+                            {patchCount > 0 && (
+                              <span className="px-1.5 py-0.5 rounded bg-violet-500/30 text-xs">
+                                {patchCount}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                      {/* CREATE 文件预览按钮 */}
+                      {patches.filter(p => p.operation === 'CREATE').map(patch => (
                         <button
-                          key={name}
-                          onClick={() => handlePreview(name)}
+                          key={patch.file}
+                          onClick={() => handlePreviewCreate(patch)}
                           className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
-                            previewFile?.name === name
-                              ? 'bg-violet-500/20 border-violet-500/50 text-violet-300'
-                              : 'bg-gray-800/50 border-gray-700/50 hover:border-gray-600'
+                            previewFile?.name === patch.file
+                              ? 'bg-purple-500/20 border-purple-500/50 text-purple-300'
+                              : 'bg-purple-500/10 border-purple-500/30 hover:border-purple-500/50 text-purple-400'
                           }`}
                         >
-                          <Icons.FileText />
-                          <span className="text-sm">{name}</span>
-                          {patchCount > 0 && (
-                            <span className="px-1.5 py-0.5 rounded bg-violet-500/30 text-xs">
-                              {patchCount}
-                            </span>
-                          )}
+                          <Icons.FilePlus />
+                          <span className="text-sm">{patch.file}</span>
+                          <span className="px-1.5 py-0.5 rounded bg-purple-500/30 text-xs">NEW</span>
                         </button>
-                      );
-                    })
+                      ))}
+                    </>
                   )}
                 </div>
                 
@@ -834,15 +1048,17 @@ def new_function():
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <h3 className="text-sm font-medium text-gray-400">
-                        变更预览: {previewFile.name}
+                        {previewFile.isCreate ? '新文件预览' : '变更预览'}: {previewFile.name}
                       </h3>
-                      <button
-                        onClick={() => handlePreview(previewFile.name)}
-                        className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-gray-400 hover:text-white transition-colors"
-                      >
-                        <Icons.RefreshCw />
-                        刷新
-                      </button>
+                      {!previewFile.isCreate && (
+                        <button
+                          onClick={() => handlePreview(previewFile.name)}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-gray-400 hover:text-white transition-colors"
+                        >
+                          <Icons.RefreshCw />
+                          刷新
+                        </button>
+                      )}
                     </div>
                     <DiffView original={previewFile.original} modified={previewFile.modified} />
                   </div>
@@ -855,8 +1071,8 @@ def new_function():
           
           <footer className="border-t border-gray-800/50 mt-auto">
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between text-sm text-gray-500 flex-wrap gap-2">
-              <span>FIUP Tool UI v2.0</span>
-              <span className="hidden sm:inline">基于文本锚点的代码修改协议</span>
+              <span>FIUP Tool v3.0</span>
+              <span className="hidden sm:inline">可见缩进标记 · → = 4 spaces</span>
               <a href="https://github.com/Thankyou-Cheems" target="_blank" className="hover:text-gray-300 transition-colors">猹Cheems</a>
             </div>
           </footer>
