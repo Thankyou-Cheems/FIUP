@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FIUP Tool v1.2 - File Incremental Update Protocol Tool
+FIUP Tool v2.0 - File Incremental Update Protocol Tool
 文件增量更新协议工具
 
 Usage:
@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from typing import Optional
 from enum import Enum
 
-__version__ = "1.2.0"
+__version__ = "2.0.0"
 
 
 # ============== 数据结构 ==============
@@ -68,7 +68,7 @@ class ApplyResult:
     match_line: int = -1
     original_text: str = ""
     new_text: str = ""
-    similar_candidates: list = None  # 相似代码片段，用于错误提示
+    similar_candidates: list = None
 
     def __post_init__(self):
         if self.similar_candidates is None:
@@ -78,13 +78,13 @@ class ApplyResult:
 # ============== 解析器 ==============
 
 class FIUPParser:
-    """解析 FIUP 格式的补丁"""
+    """解析 FIUP v2.0 格式的补丁"""
     
     PATCH_PATTERN = re.compile(
         r'<<<FIUP_PATCH\s+file="([^"]+)">>>\s*'
         r'\[OPERATION\]:\s*(REPLACE|INSERT_AFTER|INSERT_BEFORE|DELETE)\s*'
-        r'\[ANCHOR\]:\s*```anchor\s*\n(.*?)```\s*'
-        r'(?:\[CONTENT\]:\s*```content\s*\n(.*?)```)?\s*'
+        r'<<<ANCHOR>>>\n(.*?)<<<END_ANCHOR>>>\s*'
+        r'(?:<<<CONTENT>>>\n(.*?)<<<END_CONTENT>>>\s*)?'
         r'<<<END_FIUP_PATCH>>>',
         re.DOTALL
     )
@@ -131,10 +131,10 @@ class FIUPParser:
                 errors.append("检测到补丁标记但解析失败，请检查格式:")
                 if "[OPERATION]:" not in text:
                     errors.append("  ✗ 缺少 [OPERATION]: 标记")
-                if "[ANCHOR]:" not in text:
-                    errors.append("  ✗ 缺少 [ANCHOR]: 标记")
-                if "```anchor" not in text:
-                    errors.append("  ✗ 锚点应使用 ```anchor ... ``` 包裹")
+                if "<<<ANCHOR>>>" not in text:
+                    errors.append("  ✗ 缺少 <<<ANCHOR>>> 标记")
+                if "<<<END_ANCHOR>>>" not in text:
+                    errors.append("  ✗ 锚点块未正确闭合 (缺少 <<<END_ANCHOR>>>)")
                 if "<<<END_FIUP_PATCH>>>" not in text:
                     errors.append("  ✗ 缺少 <<<END_FIUP_PATCH>>> 结束标记")
             else:
@@ -157,7 +157,6 @@ class FIUPParser:
             if patch.operation != Operation.DELETE and not patch.content.strip():
                 errors.append(f"{prefix}非 DELETE 操作但内容为空")
             
-            # 检查占位符
             if '...' in patch.anchor or '# ...' in patch.anchor:
                 warnings.append(f"{prefix}⚠ 锚点中包含 '...'，这可能导致匹配失败")
         
@@ -181,7 +180,6 @@ class TextMatcher:
                     strict: bool = False) -> tuple[MatchResult, int, int, list]:
         """
         在内容中查找锚点
-        
         返回: (匹配类型, 开始位置, 结束位置, 相似候选列表)
         """
         norm_content = cls.normalize_whitespace(content)
@@ -201,7 +199,6 @@ class TextMatcher:
         
         # 2. 模糊匹配
         if strict:
-            # 严格模式下，尝试找出相似片段用于提示
             similar_candidates = cls._find_similar_fragments(norm_content, norm_anchor, top_k=3)
             return MatchResult.NOT_FOUND, -1, -1, similar_candidates
         
@@ -216,14 +213,13 @@ class TextMatcher:
             candidate = '\n'.join(content_lines[i:i + len(anchor_lines)])
             ratio = difflib.SequenceMatcher(None, candidate, norm_anchor).ratio()
             
-            if ratio > 0.6:  # 记录所有相似度 > 60% 的候选
+            if ratio > 0.6:
                 candidates.append((ratio, i, candidate))
             
             if ratio > best_ratio:
                 best_ratio = ratio
                 best_start_line = i
         
-        # 排序并取前3个作为相似候选
         candidates.sort(reverse=True, key=lambda x: x[0])
         similar_candidates = [(c[0], c[2], c[1]+1) for c in candidates[:3]]
         
@@ -330,7 +326,6 @@ class FIUPApplier:
             result = self._apply_patch(content, patch)
             results.append(result)
             
-            # 交互式确认模糊匹配
             if result.match_result == MatchResult.FUZZY and self.interactive and not self.dry_run:
                 if not self._confirm_fuzzy_match(result):
                     result.success = False
@@ -404,18 +399,14 @@ class FIUPApplier:
         
         if patch.operation == Operation.REPLACE:
             return before + patch.content + after
-        
         elif patch.operation == Operation.INSERT_AFTER:
             separator = '\n' if not matched.endswith('\n') else ''
             return before + matched + separator + patch.content + after
-        
         elif patch.operation == Operation.INSERT_BEFORE:
             separator = '\n' if not patch.content.endswith('\n') else ''
             return before + patch.content + separator + matched + after
-        
         elif patch.operation == Operation.DELETE:
             return before + after
-        
         return content
     
     def _confirm_fuzzy_match(self, result: ApplyResult) -> bool:
@@ -566,7 +557,6 @@ def cmd_apply(args):
     
     results = applier.apply_all(patches)
     
-    # 输出结果
     success_count = sum(1 for r in results if r.success)
     print()
     
@@ -596,7 +586,7 @@ def cmd_apply(args):
 
 
 def cmd_preview(args):
-    """preview 命令 - 详细预览"""
+    """preview 命令"""
     args.dry_run = True
     args.verbose = True
     args.backup = False
@@ -633,7 +623,7 @@ def cmd_validate(args):
 
 
 def cmd_extract(args):
-    """extract 命令 - 从文本中提取FIUP块"""
+    """extract 命令"""
     input_path = Path(args.input_file)
     if not input_path.exists():
         print_colored(f"错误: 文件不存在: {input_path}", "red")
@@ -660,7 +650,7 @@ def cmd_extract(args):
 
 
 def cmd_undo(args):
-    """undo 命令 - 从备份恢复"""
+    """undo 命令"""
     target_dir = Path(args.target).resolve()
     if not target_dir.exists():
         print_colored(f"错误: 目标路径不存在: {target_dir}", "red")
@@ -669,7 +659,6 @@ def cmd_undo(args):
     if target_dir.is_file():
         target_dir = target_dir.parent
     
-    # 查找最近的备份
     backups = sorted(target_dir.glob(".fiup_backup_*"), reverse=True)
     if not backups:
         print_colored("未找到备份目录", "yellow")
@@ -684,7 +673,6 @@ def cmd_undo(args):
             print(f"  {i+1}. {backup.name} ({file_count} 个文件)")
         return 0
     
-    # 选择备份
     backup_dir = backups[0]
     if args.backup_name:
         matching = [b for b in backups if args.backup_name in b.name]
@@ -695,7 +683,6 @@ def cmd_undo(args):
     
     print_colored(f"从备份恢复: {backup_dir.name}", "cyan")
     
-    # 恢复文件
     restored = 0
     for backup_file in backup_dir.rglob("*"):
         if backup_file.is_file():
@@ -739,7 +726,7 @@ def cmd_diff(args):
 def main():
     parser = argparse.ArgumentParser(
         prog='fiup',
-        description="FIUP Tool v1.2 - 文件增量更新协议工具",
+        description="FIUP Tool v2.0 - 文件增量更新协议工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 快捷用法:
@@ -757,8 +744,6 @@ def main():
     )
     
     parser.add_argument('--version', '-V', action='version', version=f'%(prog)s {__version__}')
-    
-    # 顶层快捷参数（用于 fiup -t ./file 这种简写）
     parser.add_argument('--target', '-t', help='目标目录或文件')
     parser.add_argument('--clipboard', '-c', action='store_true', help='从剪贴板读取')
     parser.add_argument('--dry-run', '-n', action='store_true', help='预览模式')
@@ -770,7 +755,6 @@ def main():
     
     subparsers = parser.add_subparsers(dest='command', help='命令')
     
-    # apply
     apply_p = subparsers.add_parser('apply', help='应用补丁')
     apply_p.add_argument('patch_file', nargs='?', default='-', help='补丁文件（- 表示stdin）')
     apply_p.add_argument('--target', '-t', required=True, help='目标目录或文件')
@@ -782,7 +766,6 @@ def main():
     apply_p.add_argument('--interactive', '-i', action='store_true')
     apply_p.add_argument('--clipboard', '-c', action='store_true')
     
-    # preview
     preview_p = subparsers.add_parser('preview', help='预览变更（等同于 apply --dry-run -v）')
     preview_p.add_argument('patch_file', nargs='?', default='-')
     preview_p.add_argument('--target', '-t', required=True)
@@ -790,30 +773,25 @@ def main():
     preview_p.add_argument('--interactive', '-i', action='store_true')
     preview_p.add_argument('--clipboard', '-c', action='store_true')
     
-    # validate
     validate_p = subparsers.add_parser('validate', help='验证补丁格式')
     validate_p.add_argument('patch_file', help='补丁文件')
     
-    # extract
     extract_p = subparsers.add_parser('extract', help='从文件中提取FIUP块')
     extract_p.add_argument('input_file', help='输入文件（如AI对话记录）')
     extract_p.add_argument('--output', '-o', help='输出文件')
     
-    # undo
     undo_p = subparsers.add_parser('undo', help='从备份恢复')
     undo_p.add_argument('--target', '-t', required=True, help='目标目录')
     undo_p.add_argument('--list', '-l', action='store_true', help='列出所有备份')
     undo_p.add_argument('--backup-name', help='指定备份名称')
     undo_p.add_argument('--dry-run', '-n', action='store_true')
     
-    # diff
     diff_p = subparsers.add_parser('diff', help='比较两个文件')
     diff_p.add_argument('file1', help='原始文件')
     diff_p.add_argument('file2', help='修改后文件')
     
     args = parser.parse_args()
     
-    # 处理顶层快捷调用: fiup -t ./file
     if args.command is None and args.target:
         args.command = 'apply'
         args.patch_file = '-'

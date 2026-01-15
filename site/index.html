@@ -44,7 +44,6 @@
   <script type="text/babel">
     const { useState, useCallback, useMemo } = React;
 
-    // Icons as SVG components
     const Icons = {
       Upload: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
       FileText: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>,
@@ -63,9 +62,10 @@
       Download: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
     };
 
-    // FIUP 解析器
+    // FIUP v2.0 解析器
     const parseFIUP = (text) => {
-      const pattern = /<<<FIUP_PATCH\s+file="([^"]+)">>>\s*\[OPERATION\]:\s*(REPLACE|INSERT_AFTER|INSERT_BEFORE|DELETE)\s*\[ANCHOR\]:\s*```anchor\s*\n([\s\S]*?)```\s*(?:\[CONTENT\]:\s*```content\s*\n([\s\S]*?)```)?\s*<<<END_FIUP_PATCH>>>/g;
+      const pattern = /<<<FIUP_PATCH\s+file="([^"]+)">>>\s*\[OPERATION\]:\s*(REPLACE|INSERT_AFTER|INSERT_BEFORE|DELETE)\s*<<<ANCHOR>>>\n([\s\S]*?)<<<END_ANCHOR>>>\s*(?:<<<CONTENT>>>\n([\s\S]*?)<<<END_CONTENT>>>\s*)?<<<END_FIUP_PATCH>>>/g;
+      
       const patches = [];
       let match;
       
@@ -79,10 +79,10 @@
           raw: match[0]
         });
       }
+      
       return patches;
     };
 
-    // 验证补丁
     const validatePatch = (patch) => {
       const errors = [];
       const warnings = [];
@@ -104,7 +104,6 @@
       return { valid: errors.length === 0, errors, warnings };
     };
 
-    // 模拟应用补丁
     const simulateApply = (content, patch) => {
       const normalizedContent = content.replace(/\r\n/g, '\n');
       const normalizedAnchor = patch.anchor.replace(/\r\n/g, '\n');
@@ -146,7 +145,6 @@
       return { success: true, message: `精确匹配 @ 行 ${line}`, result, line };
     };
 
-    // 操作类型配色
     const opColors = {
       REPLACE: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/30' },
       INSERT_AFTER: { bg: 'bg-green-500/10', text: 'text-green-400', border: 'border-green-500/30' },
@@ -154,7 +152,6 @@
       DELETE: { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/30' }
     };
 
-    // 补丁卡片组件
     const PatchCard = ({ patch, index, expanded, onToggle, onDelete, fileContent }) => {
       const validation = useMemo(() => validatePatch(patch), [patch]);
       const applyResult = useMemo(() => 
@@ -249,7 +246,6 @@
       );
     };
 
-    // Diff 视图组件
     const DiffView = ({ original, modified }) => {
       const diff = useMemo(() => {
         if (!original || !modified) return [];
@@ -304,7 +300,6 @@
       );
     };
 
-    // Toast 组件
     const Toast = ({ message, type, onClose }) => {
       React.useEffect(() => {
         const timer = setTimeout(onClose, 3000);
@@ -324,7 +319,6 @@
       );
     };
 
-    // 主应用
     function FIUPApp() {
       const [patchText, setPatchText] = useState('');
       const [patches, setPatches] = useState([]);
@@ -339,7 +333,6 @@
         setToast({ message, type });
       };
       
-      // 解析补丁
       const handleParse = useCallback(() => {
         const parsed = parseFIUP(patchText);
         setPatches(parsed);
@@ -352,7 +345,6 @@
         }
       }, [patchText]);
       
-      // 处理文件上传
       const handleFileUpload = useCallback((e) => {
         const uploadedFiles = Array.from(e.target.files);
         if (uploadedFiles.length === 0) return;
@@ -360,11 +352,7 @@
           const reader = new FileReader();
           reader.onload = (event) => {
             const content = event.target.result;
-            setFiles(prev => ({
-              ...prev,
-              [file.name]: content
-            }));
-            // 如果当前预览的就是这个文件，需要重新计算预览
+            setFiles(prev => ({ ...prev, [file.name]: content }));
             setPreviewFile(prev => {
               if (prev && prev.name === file.name) {
                 return { ...prev, original: content, needsRefresh: true };
@@ -375,10 +363,9 @@
           };
           reader.readAsText(file);
         });
-        // 重置 input 以允许重复上传同一文件
         e.target.value = '';
       }, []);
-      // 处理拖拽上传
+
       const handleDragOver = useCallback((e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -403,10 +390,7 @@
           const reader = new FileReader();
           reader.onload = (event) => {
             const content = event.target.result;
-            setFiles(prev => ({
-              ...prev,
-              [file.name]: content
-            }));
+            setFiles(prev => ({ ...prev, [file.name]: content }));
             setPreviewFile(prev => {
               if (prev && prev.name === file.name) {
                 return { ...prev, original: content, needsRefresh: true };
@@ -419,7 +403,6 @@
         showToast(`已加载 ${droppedFiles.length} 个文件`, 'success');
       }, []);
 
-      // 删除已上传的文件
       const handleDeleteFile = useCallback((fileName) => {
         setFiles(prev => {
           const newFiles = { ...prev };
@@ -432,12 +415,10 @@
         showToast(`已移除文件: ${fileName}`, 'info');
       }, [previewFile]);
       
-      // 删除补丁
       const handleDeletePatch = useCallback((id) => {
         setPatches(prev => prev.filter(p => p.id !== id));
       }, []);
       
-      // 应用所有补丁并预览
       const handlePreview = useCallback((fileName) => {
         const filePatches = patches.filter(p => p.file === fileName || p.file.endsWith('/' + fileName));
         const originalContent = files[fileName] || '';
@@ -453,14 +434,12 @@
         setPreviewFile({ name: fileName, original: originalContent, modified: content, needsRefresh: false });
       }, [patches, files]);
 
-      // 当 previewFile 标记需要刷新时，重新计算
       React.useEffect(() => {
         if (previewFile?.needsRefresh && previewFile.name) {
           handlePreview(previewFile.name);
         }
       }, [previewFile?.needsRefresh, previewFile?.name, handlePreview]);
 
-      // 直接应用补丁并下载文件
       const handleApplyAndDownload = useCallback((fileName) => {
         const filePatches = patches.filter(p => p.file === fileName || p.file.endsWith('/' + fileName));
         const originalContent = files[fileName] || files[Object.keys(files).find(f => fileName.endsWith(f))] || '';
@@ -496,14 +475,12 @@
         showToast(`已导出: ${fileName} (${successCount}/${filePatches.length} 补丁成功)`, 'success');
       }, [patches, files]);
       
-      // 复制补丁
       const handleCopyPatches = useCallback(() => {
         const text = patches.map(p => p.raw).join('\n\n');
         navigator.clipboard.writeText(text);
         showToast('已复制到剪贴板', 'success');
       }, [patches]);
 
-      // 导出修改后的文件
       const handleExport = useCallback(() => {
         if (!previewFile) return;
         const blob = new Blob([previewFile.modified], { type: 'text/plain' });
@@ -516,7 +493,6 @@
         showToast(`已导出: ${previewFile.name}`, 'success');
       }, [previewFile]);
       
-      // 统计
       const stats = useMemo(() => {
         const byOp = { REPLACE: 0, INSERT_AFTER: 0, INSERT_BEFORE: 0, DELETE: 0 };
         const byFile = {};
@@ -534,7 +510,6 @@
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          {/* 拖拽上传遮罩 */}
           {isDragging && (
             <div className="fixed inset-0 bg-violet-500/10 backdrop-blur-sm z-50 flex items-center justify-center pointer-events-none">
               <div className="bg-gray-900/90 border-2 border-dashed border-violet-500 rounded-2xl p-12 text-center">
@@ -547,7 +522,6 @@
             </div>
           )}
 
-          {/* Header */}
           <header className="border-b border-gray-800/50 backdrop-blur-sm bg-gray-900/30 sticky top-0 z-10">
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -556,7 +530,7 @@
                 </div>
                 <div>
                   <h1 className="text-lg font-semibold">FIUP Tool</h1>
-                  <p className="text-xs text-gray-500 hidden sm:block">文件增量更新协议 FIUP 在线工具 v1.4</p>
+                  <p className="text-xs text-gray-500 hidden sm:block">文件增量更新协议 FIUP 在线工具 v2.0</p>
                 </div>
               </div>
               
@@ -575,10 +549,8 @@
           
           <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
             <div className="flex flex-col lg:flex-row gap-6">
-              {/* 左侧：全局文件管理面板 */}
               <div className="lg:w-72 xl:w-80 flex-shrink-0">
                 <div className="lg:sticky lg:top-24 space-y-4">
-                  {/* 上传区域 */}
                   <div 
                     className={`p-4 rounded-xl border-2 border-dashed transition-all cursor-pointer ${
                       isDragging 
@@ -608,7 +580,6 @@
                     />
                   </div>
 
-                  {/* 已上传文件列表 */}
                   <div className="bg-gray-800/30 rounded-xl border border-gray-700/50 overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/50">
                       <h3 className="text-sm font-medium text-gray-300">
@@ -671,7 +642,6 @@
                     </div>
                   </div>
 
-                  {/* 快捷操作 */}
                   {patches.length > 0 && Object.keys(files).length > 0 && (
                     <div className="bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 rounded-xl border border-violet-500/20 p-3">
                       <div className="text-xs font-medium text-gray-400 mb-2">一键应用并下载</div>
@@ -697,9 +667,7 @@
                 </div>
               </div>
 
-              {/* 右侧：主内容区 */}
               <div className="flex-1 min-w-0">
-                {/* Tab 导航 */}
                 <div className="flex gap-1 p-1 bg-gray-800/50 rounded-xl mb-6 w-fit overflow-x-auto">
                   {[
                     { id: 'input', label: '输入补丁', icon: Icons.FileText },
@@ -722,7 +690,6 @@
                   ))}
                 </div>
             
-            {/* 输入面板 */}
             {activeTab === 'input' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-4">
@@ -746,17 +713,15 @@
 <<<FIUP_PATCH file="example.py">>>
 [OPERATION]: REPLACE
 
-[ANCHOR]:
-\`\`\`anchor
+<<<ANCHOR>>>
 def old_function():
     pass
-\`\`\`
+<<<END_ANCHOR>>>
 
-[CONTENT]:
-\`\`\`content
+<<<CONTENT>>>
 def new_function():
     return "Hello"
-\`\`\`
+<<<END_CONTENT>>>
 <<<END_FIUP_PATCH>>>`}
                   className="w-full h-80 sm:h-96 bg-gray-900/50 border border-gray-700/50 rounded-xl p-4 font-mono text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 resize-none"
                 />
@@ -769,10 +734,8 @@ def new_function():
               </div>
             )}
             
-            {/* 补丁列表 */}
             {activeTab === 'patches' && (
               <div className="space-y-4">
-                {/* 统计栏 */}
                 {stats.total > 0 && (
                   <div className="flex items-center gap-4 p-4 bg-gray-800/30 rounded-xl flex-wrap">
                     <div className="flex items-center gap-4 sm:gap-6 flex-1 flex-wrap">
@@ -794,7 +757,6 @@ def new_function():
                   </div>
                 )}
                 
-                {/* 补丁卡片 */}
                 <div className="space-y-3">
                   {patches.length === 0 ? (
                     <div className="text-center py-16 text-gray-500">
@@ -819,7 +781,6 @@ def new_function():
               </div>
             )}
             
-            {/* 预览面板 */}
             {activeTab === 'preview' && (
               <div className="space-y-4">
                 <div className="flex items-center gap-4 flex-wrap">
@@ -835,7 +796,6 @@ def new_function():
                   )}
                 </div>
                 
-                {/* 文件列表 */}
                 <div className="flex flex-wrap gap-2">
                   {Object.keys(files).length === 0 ? (
                     <div className="w-full text-center py-8 border-2 border-dashed border-gray-700 rounded-xl">
@@ -870,7 +830,6 @@ def new_function():
                   )}
                 </div>
                 
-                {/* Diff 视图 */}
                 {previewFile && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -894,22 +853,19 @@ def new_function():
             </div>
           </main>
           
-          {/* Footer */}
           <footer className="border-t border-gray-800/50 mt-auto">
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between text-sm text-gray-500 flex-wrap gap-2">
-              <span>FIUP Tool UI v1.4</span>
+              <span>FIUP Tool UI v2.0</span>
               <span className="hidden sm:inline">基于文本锚点的代码修改协议</span>
               <a href="https://github.com/Thankyou-Cheems" target="_blank" className="hover:text-gray-300 transition-colors">猹Cheems</a>
             </div>
           </footer>
 
-          {/* Toast */}
           {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         </div>
       );
     }
 
-    // 渲染应用
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<FIUPApp />);
   </script>
