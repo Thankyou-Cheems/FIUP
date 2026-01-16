@@ -2,13 +2,13 @@
 
 ## Overview
 
-FIUP (File Incremental Update Protocol) is a text-based patch format designed for LLM code modification. It uses **unique text anchors** instead of line numbers, and **visible indentation characters** instead of whitespace.
+FIUP (File Incremental Update Protocol) is a text-based patch format designed for LLM code modification. It uses **unique text anchors** instead of line numbers, and wraps patches in **` ```fiup ` code blocks** to preserve formatting.
 
 ## Core Principles
 
 1. **Anchor-based positioning**: Use unique code snippets (3-6 lines) to locate modification points
-2. **Visible indentation**: Use `→` character to represent indentation units (no counting required)
-3. **Code block wrapper**: Wrap entire patch in ` ```fiup ` block for format preservation
+2. **Code block wrapper**: Wrap entire patch in ` ```fiup ` block to preserve indentation
+3. **Original indentation**: Keep original spaces/tabs as-is (no conversion needed)
 4. **Flat structure**: No nested code blocks inside patches
 5. **One patch per block**: Each `<<<FIUP>>>...<<<END>>>` contains exactly one operation
 
@@ -16,7 +16,7 @@ FIUP (File Incremental Update Protocol) is a text-based patch format designed fo
 
 ### Patch Block Structure
 
-IMPORTANT: Always wrap the entire patch in a `fiup` code block:
+IMPORTANT: Always wrap the entire patch in a `fiup` code block to preserve indentation:
 
 ````
 ```fiup
@@ -24,32 +24,23 @@ IMPORTANT: Always wrap the entire patch in a `fiup` code block:
 [FILE]: <filepath>
 [OP]: <operation_type>
 [ANCHOR]
-line1
-→indented_line2
-→→more_indented_line3
+original code line 1
+    indented line 2
+        more indented line 3
 [CONTENT]
-line1
-→indented_line2
-→→more_indented_line3
+new code line 1
+    indented line 2
+        more indented line 3
 <<<END>>>
 ```
 ````
 
-### Indentation Marker
+### Key Rules
 
-Use `→` at the start of each line to indicate indentation:
-
-- No `→` = no indentation (column 0)
-- `→` = 1 indent unit (4 spaces or 1 tab)
-- `→→` = 2 indent units (8 spaces)
-- `→→→` = 3 indent units (12 spaces)
-- `→→→→` = 4 indent units (16 spaces)
-
-**Rules**:
-- One `→` equals one indentation unit (typically 4 spaces)
-- Place `→` only at the START of lines, not within code
-- Lines with no indentation have no `→` prefix
-- Copy the indentation structure from original code, replacing spaces/tabs with `→`
+1. **Wrap in ` ```fiup `**: This preserves whitespace in markdown renderers
+2. **Copy code exactly**: Anchor and content should match the original file's indentation
+3. **No format conversion**: Use actual spaces/tabs, not special markers
+4. **Unique anchors**: 3-6 lines of code that appear only once in the file
 
 ### Operation Types
 
@@ -81,14 +72,14 @@ Replace a function implementation:
 [OP]: REPLACE
 [ANCHOR]
 def calculate_sum(a, b):
-→result = a + b
-→return result
+    result = a + b
+    return result
 [CONTENT]
 def calculate_sum(numbers: list[int]) -> int:
-→"""Calculate sum of a list of numbers."""
-→if not numbers:
-→→return 0
-→return sum(numbers)
+    """Calculate sum of a list of numbers."""
+    if not numbers:
+        return 0
+    return sum(numbers)
 <<<END>>>
 ```
 ````
@@ -103,13 +94,13 @@ Add a new method after an existing one:
 [FILE]: src/user.py
 [OP]: INSERT_AFTER
 [ANCHOR]
-→def get_name(self):
-→→return self.name
+    def get_name(self):
+        return self.name
 [CONTENT]
 
-→def get_email(self):
-→→"""Return user email."""
-→→return self.email
+    def get_email(self):
+        """Return user email."""
+        return self.email
 <<<END>>>
 ```
 ````
@@ -125,7 +116,7 @@ Add imports before existing code:
 [OP]: INSERT_BEFORE
 [ANCHOR]
 class Application:
-→def __init__(self):
+    def __init__(self):
 [CONTENT]
 from typing import Optional
 from dataclasses import dataclass
@@ -145,8 +136,8 @@ Remove a function:
 [OP]: DELETE
 [ANCHOR]
 def deprecated_function():
-→"""This function is no longer needed."""
-→pass
+    """This function is no longer needed."""
+    pass
 <<<END>>>
 ```
 ````
@@ -167,18 +158,18 @@ from typing import List
 
 
 class DataProcessor:
-→def __init__(self, data: List[str]):
-→→self.data = data
+    def __init__(self, data: List[str]):
+        self.data = data
 
-→def process(self) -> List[str]:
-→→return [item.strip() for item in self.data]
+    def process(self) -> List[str]:
+        return [item.strip() for item in self.data]
 <<<END>>>
 ```
 ````
 
 ### Example 6: Deeply Nested Code
 
-For deeply nested code, simply add more `→`:
+For deeply nested code, just copy the original indentation:
 
 ````
 ```fiup
@@ -186,24 +177,22 @@ For deeply nested code, simply add more `→`:
 [FILE]: src/parser.py
 [OP]: REPLACE
 [ANCHOR]
-→→→if token.type == "STRING":
-→→→→value = token.value
-→→→→return StringNode(value)
+            if token.type == "STRING":
+                value = token.value
+                return StringNode(value)
 [CONTENT]
-→→→if token.type == "STRING":
-→→→→value = self.parse_string(token.value)
-→→→→node = StringNode(value)
-→→→→node.line = token.line
-→→→→return node
+            if token.type == "STRING":
+                value = self.parse_string(token.value)
+                node = StringNode(value)
+                node.line = token.line
+                return node
 <<<END>>>
 ```
 ````
 
 ### Example 7: Multiple Patches
 
-When multiple modifications are needed, you can use separate code blocks or combine in one:
-
-**Option A: Separate blocks (recommended for clarity)**
+When multiple modifications are needed, use separate code blocks:
 
 ````
 ```fiup
@@ -231,7 +220,7 @@ LOG_LEVEL = "INFO"
 ```
 ````
 
-**Option B: Combined in one block**
+Or combine in one block:
 
 ````
 ```fiup
@@ -266,29 +255,25 @@ LOG_LEVEL = "INFO"
 
 ### Good Anchor Examples
 
-````
-```fiup
+```
 [ANCHOR]
 def process_user_data(user_id: str, options: dict):
-→"""Process user data with given options."""
-→logger.info(f"Processing user {user_id}")
+    """Process user data with given options."""
+    logger.info(f"Processing user {user_id}")
 ```
-````
 
-````
-```fiup
-[ANCHOR]
-→# SECTION: Database Configuration
-→DB_HOST = "localhost"
-→DB_PORT = 5432
 ```
-````
+[ANCHOR]
+    # SECTION: Database Configuration
+    DB_HOST = "localhost"
+    DB_PORT = 5432
+```
 
 ### Bad Anchor Examples
 
 ```
 [ANCHOR]
-→return result
+    return result
 ```
 (Too generic, likely appears multiple times)
 
@@ -302,89 +287,36 @@ import os
 
 ### Blank Lines
 
-Blank lines are written as empty lines (no `→` needed):
+Blank lines are written as empty lines:
 
-````
-```fiup
+```
 [CONTENT]
 def func_a():
-→pass
+    pass
 
 
 def func_b():
-→pass
+    pass
 ```
-````
 
-### Code Containing → Character
+### Mixed Indentation
 
-If the actual code contains `→` character, escape it as `\→`:
-
-````
-```fiup
-[CONTENT]
-→print("Arrow: \→")
-```
-````
-
-### Mixed Indentation Detection
-
-The tool automatically detects whether the target file uses tabs or spaces:
-- If file uses tabs: each `→` becomes 1 tab
-- If file uses spaces: each `→` becomes 4 spaces (configurable)
+The tool preserves whatever indentation style the original file uses:
+- If file uses tabs: keep tabs
+- If file uses spaces: keep spaces
 
 ## For LLMs: Quick Rules
 
-1. **Wrap in code block**: Always use ` ```fiup ` and ` ``` `
+1. **Wrap in ` ```fiup `** code block
 2. **Start with `<<<FIUP>>>`**, end with **`<<<END>>>`**
 3. **[FILE]:** specify the file path
 4. **[OP]:** use REPLACE, INSERT_AFTER, INSERT_BEFORE, DELETE, or CREATE
-5. **[ANCHOR]:** copy the target code exactly, replacing leading spaces with `→`
-6. **[CONTENT]:** write new code, using `→` for each indentation level
-7. **One `→` = one indent level** (don't count, just match the visual nesting)
+5. **[ANCHOR]:** copy the target code **exactly as it appears** (same indentation)
+6. **[CONTENT]:** write new code with **correct indentation for that location**
+7. **No special markers**: just use normal spaces/tabs
 
-## Why This Format?
-
-### Problem with Plain Indentation
-Web chat interfaces collapse multiple spaces into one, breaking indentation-based formats.
-
-### Problem with Nested Code Blocks
-Using ` ``` ` inside ` ``` ` causes parsing issues and confuses many LLMs.
-
-### FIUP v3.0 Solution
-- **Outer ` ```fiup ` block**: Preserves formatting in markdown-enabled interfaces
-- **`→` markers**: Visible indentation that survives even if code block fails
-- **Flat structure**: No nesting, easy for all LLMs to generate correctly
-
-## Protocol Metadata
-
-- **Version**: 3.0
-- **Created**: 2025
-- **License**: MIT
-- **Repository**: https://github.com/Thankyou-Cheems/FIUP
-
-## Quick Reference Card
-
-````
-```fiup
-<<<FIUP>>>
-[FILE]: path/to/file.ext
-[OP]: REPLACE | INSERT_AFTER | INSERT_BEFORE | DELETE | CREATE
-[ANCHOR]
-code_at_column_0
-→indented_once
-→→indented_twice
-[CONTENT]
-new_code_at_column_0
-→new_indented_once
-→→new_indented_twice
-→→→new_indented_three_times
-<<<END>>>
-```
-````
 
 **Remember**: 
 - Always wrap in ` ```fiup ` code block
-- `→` = one indentation level
-- No `→` = no indentation
-- Just match the visual structure, no counting needed
+- Copy code exactly as-is, including indentation
+- No special markers or conversions needed

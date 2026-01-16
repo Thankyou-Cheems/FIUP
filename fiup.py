@@ -16,11 +16,10 @@ Usage:
     fiup -c -t ./project               从剪贴板应用到目录
     cat ai_response.txt | fiup -t .    管道输入，应用到当前目录
 
-v3.0 新特性:
-    - 使用 → 可见字符表示缩进（→ = 4空格）
-    - 支持 ```fiup 代码块包裹
+v3.0 特性:
+    - 使用 ```fiup 代码块包裹以保留缩进
+    - 简化的标记语法: <<<FIUP>>>, [FILE]:, [OP]:
     - 新增 CREATE 操作（创建新文件）
-    - 简化的标记语法
 """
 
 import re
@@ -35,52 +34,6 @@ from typing import Optional
 from enum import Enum
 
 __version__ = "3.0.0"
-
-# 缩进配置
-INDENT_CHAR = '→'
-INDENT_SIZE = 4  # 每个 → 转换为4个空格
-
-
-# ============== 缩进转换 ==============
-
-def convert_indent_to_spaces(text: str, indent_unit: str = '    ') -> str:
-    """将 → 转换为实际缩进（空格）"""
-    if not text:
-        return text
-    lines = []
-    for line in text.split('\n'):
-        indent_count = 0
-        i = 0
-        while i < len(line) and line[i] == INDENT_CHAR:
-            indent_count += 1
-            i += 1
-        rest = line[i:]
-        # 处理转义的箭头 \→
-        unescaped = rest.replace('\\' + INDENT_CHAR, INDENT_CHAR)
-        lines.append(indent_unit * indent_count + unescaped)
-    return '\n'.join(lines)
-
-
-def convert_spaces_to_indent(text: str, indent_unit: str = '    ') -> str:
-    """将实际缩进转换为 → （用于显示）"""
-    if not text:
-        return text
-    lines = []
-    for line in text.split('\n'):
-        indent_count = 0
-        pos = 0
-        # 检测空格缩进
-        while pos < len(line):
-            if line[pos:pos + len(indent_unit)] == indent_unit:
-                indent_count += 1
-                pos += len(indent_unit)
-            elif line[pos] == '\t':
-                indent_count += 1
-                pos += 1
-            else:
-                break
-        lines.append(INDENT_CHAR * indent_count + line[pos:])
-    return '\n'.join(lines)
 
 
 # ============== 数据结构 ==============
@@ -105,12 +58,10 @@ class Patch:
     """单个补丁的数据结构"""
     file: str
     operation: Operation
-    anchor: str           # 原始格式（带 →）
-    content: str = ""     # 原始格式（带 →）
-    anchor_real: str = "" # 转换后的实际代码
-    content_real: str = "" # 转换后的实际代码
+    anchor: str
+    content: str = ""
     line_number: int = 0
-    raw: str = ""         # 原始补丁文本
+    raw: str = ""
 
 
 @dataclass
@@ -191,17 +142,11 @@ class FIUPParser:
             if content_match:
                 content_text = content_match.group(1).rstrip('\n')
             
-            # 转换缩进
-            anchor_real = convert_indent_to_spaces(anchor)
-            content_real = convert_indent_to_spaces(content_text)
-            
             patches.append(Patch(
                 file=file_path,
                 operation=operation,
                 anchor=anchor,
                 content=content_text,
-                anchor_real=anchor_real,
-                content_real=content_real,
                 line_number=line_number,
                 raw=raw
             ))
@@ -260,12 +205,6 @@ class FIUPParser:
             
             if '...' in patch.anchor or '# ...' in patch.anchor:
                 warnings.append(f"{prefix}⚠ 锚点中包含 '...'，这可能导致匹配失败")
-            
-            # 检查是否正确使用了 → 缩进
-            if patch.anchor and not any(c == INDENT_CHAR for c in patch.anchor):
-                # 检查原始锚点是否有空格缩进
-                if any(line.startswith('    ') or line.startswith('\t') for line in patch.anchor.split('\n') if line):
-                    warnings.append(f"{prefix}⚠ 锚点使用了空格/制表符缩进，建议使用 → 字符")
         
         return len(errors) == 0, errors + warnings
 
@@ -397,7 +336,7 @@ class FIUPApplier:
         self.strict = strict
         self.interactive = interactive
         self.backup_dir: Optional[Path] = None
-        self.created_files: list[Path] = []  # 新建的文件列表
+        self.created_files: list[Path] = []
     
     def apply_all(self, patches: list[Patch]) -> list[ApplyResult]:
         """应用所有补丁"""
@@ -472,7 +411,7 @@ class FIUPApplier:
                 match_result=MatchResult.MULTIPLE,
                 message=f"文件已存在: {file_path}",
                 original_text="",
-                new_text=patch.content_real
+                new_text=patch.content
             )
         
         self.created_files.append(file_path)
@@ -483,14 +422,13 @@ class FIUPApplier:
             match_result=MatchResult.EXACT,
             message=f"创建新文件",
             original_text="",
-            new_text=patch.content_real
+            new_text=patch.content
         )
     
     def _apply_patch(self, content: str, patch: Patch) -> ApplyResult:
         """应用单个补丁"""
-        # 使用转换后的实际代码进行匹配
         match_result, start, end, similar = TextMatcher.find_anchor(
-            content, patch.anchor_real, strict=self.strict
+            content, patch.anchor, strict=self.strict
         )
         
         if match_result == MatchResult.NOT_FOUND:
@@ -540,17 +478,14 @@ class FIUPApplier:
         after = content[end:]
         matched = content[start:end]
         
-        # 使用转换后的实际代码
-        new_code = patch.content_real
-        
         if patch.operation == Operation.REPLACE:
-            return before + new_code + after
+            return before + patch.content + after
         elif patch.operation == Operation.INSERT_AFTER:
             separator = '\n' if not matched.endswith('\n') else ''
-            return before + matched + separator + new_code + after
+            return before + matched + separator + patch.content + after
         elif patch.operation == Operation.INSERT_BEFORE:
-            separator = '\n' if not new_code.endswith('\n') else ''
-            return before + new_code + separator + matched + after
+            separator = '\n' if not patch.content.endswith('\n') else ''
+            return before + patch.content + separator + matched + after
         elif patch.operation == Operation.DELETE:
             return before + after
         return content
@@ -558,8 +493,8 @@ class FIUPApplier:
     def _confirm_fuzzy_match(self, result: ApplyResult) -> bool:
         """交互式确认模糊匹配"""
         print_colored(f"\n⚠ 模糊匹配确认 (行 {result.match_line}):", "yellow")
-        print("  锚点 (→ 已转换为空格):")
-        for line in result.patch.anchor_real.split('\n')[:5]:
+        print("  锚点:")
+        for line in result.patch.anchor.split('\n')[:5]:
             print(f"    {line}")
         print("\n  是否应用此补丁? [y/N] ", end="")
         try:
@@ -639,7 +574,7 @@ def read_patch_input(args) -> Optional[str]:
     if patch_file == '-':
         if sys.stdin.isatty():
             print_colored("等待输入补丁内容 (Ctrl+D 结束):", "cyan")
-            print_colored("提示: v3.0 使用 → 表示缩进，<<<FIUP>>>...<<<END>>> 包裹补丁", "gray")
+            print_colored("提示: v3.0 使用 ```fiup 代码块包裹，<<<FIUP>>>...<<<END>>> 标记", "gray")
         return sys.stdin.read()
     else:
         patch_path = Path(patch_file)
@@ -653,13 +588,11 @@ def resolve_target(args, patches: list[Patch]) -> Optional[Path]:
     """解析目标路径"""
     target_path = Path(args.target).resolve()
     
-    # CREATE 操作可以创建不存在的目录
     create_patches = [p for p in patches if p.operation == Operation.CREATE]
     non_create_patches = [p for p in patches if p.operation != Operation.CREATE]
     
     if not target_path.exists():
         if create_patches and not non_create_patches:
-            # 全部是 CREATE 操作，可以创建目录
             target_path.mkdir(parents=True, exist_ok=True)
             return target_path
         print_colored(f"错误: 目标路径不存在: {target_path}", "red")
@@ -697,7 +630,6 @@ def cmd_apply(args):
             print_colored(f"  {err}", "yellow")
         return 1
     
-    # 统计操作类型
     op_counts = {}
     for p in patches:
         op_counts[p.operation.value] = op_counts.get(p.operation.value, 0) + 1
@@ -901,7 +833,7 @@ def main():
         prog='fiup',
         description="FIUP Tool v3.0 - 文件增量更新协议工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"""
+        epilog="""
 快捷用法:
   fiup -t ./file.py                   从stdin应用补丁
   fiup -c -t ./project                从剪贴板应用
@@ -915,8 +847,7 @@ def main():
   fiup extract chat.md -o patches.fiup
 
 v3.0 格式:
-  - 使用 {INDENT_CHAR} 表示缩进（{INDENT_CHAR} = {INDENT_SIZE}空格）
-  - 支持 ```fiup 代码块包裹
+  - 使用 ```fiup 代码块包裹以保留缩进
   - 操作: REPLACE, INSERT_AFTER, INSERT_BEFORE, DELETE, CREATE
         """
     )
