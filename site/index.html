@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FIUP Tool v3.0 - 文件增量更新协议</title>
+  <title>FIUP Tool v3.2 - 增强版（宽松匹配）</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -36,6 +36,22 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #3a3a4a; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #5a5a6a; }
+    textarea.edit-area { tab-size: 2; }
+    .whitespace-visible {
+      white-space: pre;
+    }
+    .whitespace-visible .space::before {
+      content: '·';
+      color: #3a3a4a;
+    }
+    .whitespace-visible .tab::before {
+      content: '→';
+      color: #5a5a6a;
+    }
+    .whitespace-visible .newline::after {
+      content: '↵';
+      color: #3a3a4a;
+    }
   </style>
 </head>
 <body>
@@ -50,6 +66,7 @@
       FilePlus: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>,
       Play: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>,
       Eye: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+      EyeOff: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>,
       CheckCircle: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
       XCircle: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>,
       AlertTriangle: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
@@ -61,11 +78,16 @@
       RefreshCw: () => <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>,
       Github: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>,
       Download: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
+      Edit: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+      Save: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
+      X: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+      Search: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>,
+      Info: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
+      Zap: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
     };
 
     // FIUP v3.0 解析器（无缩进转换）
     const parseFIUP = (text) => {
-      // 先提取 ```fiup 代码块内容
       let content = text;
       const codeBlockPattern = /```(?:fiup)?\s*\n([\s\S]*?)```/g;
       let extracted = '';
@@ -77,7 +99,6 @@
         content = extracted;
       }
       
-      // 解析 FIUP 块
       const patches = [];
       const blockPattern = /<<<FIUP>>>([\s\S]*?)<<<END>>>/g;
       
@@ -85,15 +106,12 @@
         const block = match[0];
         const inner = match[1];
         
-        // 解析 [FILE]:
         const fileMatch = inner.match(/\[FILE\]:\s*(.+?)(?:\n|$)/);
         const file = fileMatch ? fileMatch[1].trim() : '';
         
-        // 解析 [OP]:
         const opMatch = inner.match(/\[OP\]:\s*(REPLACE|INSERT_AFTER|INSERT_BEFORE|DELETE|CREATE)(?:\n|$)/i);
         const operation = opMatch ? opMatch[1].toUpperCase() : '';
         
-        // 解析 [ANCHOR] 和 [CONTENT] 部分
         let anchor = '';
         let contentText = '';
         
@@ -120,36 +138,69 @@
       return patches;
     };
 
-    const validatePatch = (patch) => {
-      const errors = [];
-      const warnings = [];
-      
-      if (!patch.file) errors.push('文件路径为空');
-      
+    const generateRaw = (patch) => {
       if (patch.operation === 'CREATE') {
-        if (!patch.content?.trim()) {
-          errors.push('CREATE 操作但内容为空');
-        }
-      } else {
-        if (!patch.anchor?.trim()) errors.push('锚点内容为空');
-        
-        const anchorLines = patch.anchor?.trim().split('\n').length || 0;
-        if (anchorLines < 2) warnings.push(`锚点仅 ${anchorLines} 行，建议 3-6 行`);
-        
-        if (patch.operation !== 'DELETE' && !patch.content?.trim()) {
-          errors.push('非 DELETE/CREATE 操作但内容为空');
-        }
+        return `<<<FIUP>>>
+[FILE]: ${patch.file}
+[OP]: ${patch.operation}
+[CONTENT]
+${patch.content}
+<<<END>>>`;
       }
       
-      if (patch.anchor?.includes('...') || patch.anchor?.includes('# ...')) {
-        warnings.push('锚点中包含 "..."，可能导致匹配失败');
+      let raw = `<<<FIUP>>>
+[FILE]: ${patch.file}
+[OP]: ${patch.operation}
+[ANCHOR]
+${patch.anchor}`;
+      
+      if (patch.operation !== 'DELETE') {
+        raw += `
+[CONTENT]
+${patch.content}`;
       }
       
-      return { valid: errors.length === 0, errors, warnings };
+      raw += `
+<<<END>>>`;
+      
+      return raw;
     };
 
-    const simulateApply = (content, patch) => {
-      // CREATE 操作特殊处理
+    // ============================================================================
+    // 改进的匹配函数 - 支持宽松模式
+    // ============================================================================
+    
+    // 标准化文本（用于宽松匹配）
+    const normalizeWhitespace = (text) => {
+      return text
+        .split('\n')
+        .map(line => line.trimEnd()) // 移除行尾空白
+        .join('\n')
+        .replace(/[ \t]+/g, ' '); // 统一所有空白为单个空格
+    };
+
+    // 查找最相似的文本片段
+    const findSimilarContent = (content, anchor, maxResults = 3) => {
+      const anchorLines = anchor.split('\n').filter(l => l.trim());
+      if (anchorLines.length === 0) return [];
+      
+      const firstLine = anchorLines[0].trim();
+      const contentLines = content.split('\n');
+      const matches = [];
+      
+      for (let i = 0; i < contentLines.length; i++) {
+        if (contentLines[i].trim() === firstLine) {
+          matches.push({
+            line: i + 1,
+            preview: contentLines.slice(i, i + anchorLines.length).join('\n')
+          });
+        }
+      }
+      
+      return matches.slice(0, maxResults);
+    };
+
+    const simulateApply = (content, patch, fuzzyMatch = false) => {
       if (patch.operation === 'CREATE') {
         return { 
           success: true, 
@@ -162,18 +213,51 @@
       const normalizedContent = content.replace(/\r\n/g, '\n');
       const normalizedAnchor = patch.anchor.replace(/\r\n/g, '\n');
       
-      const pos = normalizedContent.indexOf(normalizedAnchor);
-      if (pos === -1) {
-        return { success: false, message: '锚点未找到', result: content };
+      let searchContent = normalizedContent;
+      let searchAnchor = normalizedAnchor;
+      
+      // 宽松模式：标准化空白字符
+      if (fuzzyMatch) {
+        searchContent = normalizeWhitespace(normalizedContent);
+        searchAnchor = normalizeWhitespace(normalizedAnchor);
       }
       
-      const secondPos = normalizedContent.indexOf(normalizedAnchor, pos + 1);
+      const pos = searchContent.indexOf(searchAnchor);
+      if (pos === -1) {
+        // 查找相似内容
+        const similar = findSimilarContent(normalizedContent, normalizedAnchor);
+        return { 
+          success: false, 
+          message: '锚点未找到', 
+          result: content,
+          similar: similar.length > 0 ? similar : null,
+          debugInfo: {
+            anchorLength: normalizedAnchor.length,
+            hasTab: normalizedAnchor.includes('\t'),
+            hasTrailingSpace: /[ \t]$/.test(normalizedAnchor),
+            lineCount: normalizedAnchor.split('\n').length
+          }
+        };
+      }
+      
+      // 检查是否匹配多次
+      const secondPos = searchContent.indexOf(searchAnchor, pos + 1);
       if (secondPos !== -1) {
         return { success: false, message: '锚点匹配到多处', result: content };
       }
       
-      const before = normalizedContent.slice(0, pos);
-      const after = normalizedContent.slice(pos + normalizedAnchor.length);
+      // 在原始内容中找到对应位置（考虑宽松匹配的差异）
+      let actualPos = pos;
+      if (fuzzyMatch && pos !== -1) {
+        // 需要在原始内容中定位
+        const beforeLines = searchContent.substring(0, pos).split('\n').length;
+        const contentLines = normalizedContent.split('\n');
+        actualPos = contentLines.slice(0, beforeLines - 1).join('\n').length;
+        if (beforeLines > 1) actualPos += 1; // 加上换行符
+      }
+      
+      const before = normalizedContent.slice(0, actualPos);
+      const after = normalizedContent.slice(actualPos + normalizedAnchor.length);
       let result;
       
       switch (patch.operation) {
@@ -196,7 +280,49 @@
       }
       
       const line = before.split('\n').length;
-      return { success: true, message: `精确匹配 @ 行 ${line}`, result, line };
+      return { 
+        success: true, 
+        message: `${fuzzyMatch ? '宽松匹配' : '精确匹配'} @ 行 ${line}`, 
+        result, 
+        line,
+        fuzzyMatched: fuzzyMatch
+      };
+    };
+
+    const validatePatch = (patch) => {
+      const errors = [];
+      const warnings = [];
+      
+      if (!patch.file) errors.push('文件路径为空');
+      
+      if (patch.operation === 'CREATE') {
+        if (!patch.content?.trim()) {
+          errors.push('CREATE 操作但内容为空');
+        }
+      } else {
+        if (!patch.anchor?.trim()) errors.push('锚点内容为空');
+        
+        const anchorLines = patch.anchor?.trim().split('\n').length || 0;
+        if (anchorLines < 2) warnings.push(`锚点仅 ${anchorLines} 行，建议 3-6 行`);
+        
+        if (patch.operation !== 'DELETE' && !patch.content?.trim()) {
+          errors.push('非 DELETE/CREATE 操作但内容为空');
+        }
+        
+        // 检查空白字符问题
+        if (patch.anchor?.includes('\t')) {
+          warnings.push('锚点包含Tab字符，可能与空格混淆');
+        }
+        if (/[ \t]$/.test(patch.anchor)) {
+          warnings.push('锚点包含行尾空白，可能导致匹配失败');
+        }
+      }
+      
+      if (patch.anchor?.includes('...') || patch.anchor?.includes('# ...')) {
+        warnings.push('锚点中包含 "..."，可能导致匹配失败');
+      }
+      
+      return { valid: errors.length === 0, errors, warnings };
     };
 
     const opColors = {
@@ -207,16 +333,106 @@
       CREATE: { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/30' }
     };
 
-    const PatchCard = ({ patch, index, expanded, onToggle, onDelete, fileContent }) => {
+    const operations = ['REPLACE', 'INSERT_AFTER', 'INSERT_BEFORE', 'DELETE', 'CREATE'];
+
+    // 可视化空白字符
+    const visualizeWhitespace = (text) => {
+      if (!text) return null;
+      
+      return text.split('').map((char, idx) => {
+        if (char === ' ') {
+          return <span key={idx} className="space">·</span>;
+        } else if (char === '\t') {
+          return <span key={idx} className="tab">→   </span>;
+        } else if (char === '\n') {
+          return <span key={idx}>{'\n'}</span>;
+        }
+        return char;
+      });
+    };
+
+    const PatchCard = ({ patch, index, expanded, onToggle, onDelete, onUpdate, fileContent, fuzzyMatch }) => {
+      const [isEditing, setIsEditing] = useState(false);
+      const [editData, setEditData] = useState({
+        file: patch.file,
+        operation: patch.operation,
+        anchor: patch.anchor,
+        content: patch.content
+      });
+      const [showWhitespace, setShowWhitespace] = useState(false);
+      const [showDebug, setShowDebug] = useState(false);
+
       const validation = useMemo(() => validatePatch(patch), [patch]);
+      
+      // 先尝试精确匹配，失败则尝试宽松匹配
       const applyResult = useMemo(() => {
         if (patch.operation === 'CREATE') {
-          return simulateApply('', patch);
+          return simulateApply('', patch, false);
         }
-        return fileContent ? simulateApply(fileContent, patch) : null;
-      }, [fileContent, patch]);
+        if (!fileContent) return null;
+        
+        const exactResult = simulateApply(fileContent, patch, false);
+        if (exactResult.success) return exactResult;
+        
+        // 精确匹配失败，尝试宽松匹配
+        if (fuzzyMatch) {
+          const fuzzyResult = simulateApply(fileContent, patch, true);
+          if (fuzzyResult.success) {
+            fuzzyResult.wasFuzzy = true;
+            return fuzzyResult;
+          }
+        }
+        
+        return exactResult;
+      }, [fileContent, patch, fuzzyMatch]);
       
       const color = opColors[patch.operation] || opColors.REPLACE;
+
+      const handleStartEdit = (e) => {
+        e.stopPropagation();
+        setEditData({
+          file: patch.file,
+          operation: patch.operation,
+          anchor: patch.anchor,
+          content: patch.content
+        });
+        setIsEditing(true);
+      };
+
+      const handleCancelEdit = (e) => {
+        e.stopPropagation();
+        setIsEditing(false);
+      };
+
+      const handleSaveEdit = (e) => {
+        e.stopPropagation();
+        const updatedPatch = {
+          ...patch,
+          ...editData,
+          raw: generateRaw(editData)
+        };
+        onUpdate(updatedPatch);
+        setIsEditing(false);
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const target = e.target;
+          const start = target.selectionStart;
+          const end = target.selectionEnd;
+          const value = target.value;
+          const newValue = value.substring(0, start) + '  ' + value.substring(end);
+          
+          const fieldName = target.dataset.field;
+          if (fieldName) {
+            setEditData(prev => ({ ...prev, [fieldName]: newValue }));
+            setTimeout(() => {
+              target.selectionStart = target.selectionEnd = start + 2;
+            }, 0);
+          }
+        }
+      };
       
       return (
         <div className={`rounded-xl border ${color.border} ${color.bg} overflow-hidden transition-all duration-200`}>
@@ -228,40 +444,102 @@
               {expanded ? <Icons.ChevronDown /> : <Icons.ChevronRight />}
             </div>
             
-            <span className={`px-2 py-0.5 rounded text-xs font-mono font-medium ${color.text} ${color.bg} border ${color.border}`}>
-              {patch.operation}
-            </span>
+            {isEditing ? (
+              <select
+                value={editData.operation}
+                onChange={(e) => setEditData(prev => ({ ...prev, operation: e.target.value }))}
+                onClick={(e) => e.stopPropagation()}
+                className={`px-2 py-0.5 rounded text-xs font-mono font-medium ${color.text} bg-black/30 border ${color.border} cursor-pointer focus:outline-none focus:ring-1 focus:ring-violet-500`}
+              >
+                {operations.map(op => (
+                  <option key={op} value={op}>{op}</option>
+                ))}
+              </select>
+            ) : (
+              <span className={`px-2 py-0.5 rounded text-xs font-mono font-medium ${color.text} ${color.bg} border ${color.border}`}>
+                {patch.operation}
+              </span>
+            )}
             
-            <span className="text-gray-300 font-mono text-sm flex-1 truncate">
-              {patch.file}
-            </span>
+            {isEditing ? (
+              <input
+                type="text"
+                value={editData.file}
+                onChange={(e) => setEditData(prev => ({ ...prev, file: e.target.value }))}
+                onClick={(e) => e.stopPropagation()}
+                className="text-gray-300 font-mono text-sm flex-1 bg-black/30 border border-gray-600 rounded px-2 py-0.5 focus:outline-none focus:border-violet-500"
+                placeholder="文件路径"
+              />
+            ) : (
+              <span className="text-gray-300 font-mono text-sm flex-1 truncate">
+                {patch.file}
+              </span>
+            )}
             
             <div className="flex items-center gap-2">
-              {validation.warnings.length > 0 && (
-                <span className="text-yellow-500"><Icons.AlertTriangle /></span>
-              )}
-              {applyResult?.success === true && (
-                <span className="text-green-500"><Icons.CheckCircle /></span>
-              )}
-              {applyResult?.success === false && (
-                <span className="text-red-500"><Icons.XCircle /></span>
-              )}
-              {!validation.valid && (
-                <span className="text-red-500"><Icons.XCircle /></span>
+              {!isEditing && (
+                <>
+                  {applyResult?.wasFuzzy && (
+                    <span className="flex items-center gap-1 text-yellow-500 text-xs" title="使用了宽松匹配">
+                      <Icons.Zap />
+                    </span>
+                  )}
+                  {validation.warnings.length > 0 && (
+                    <span className="text-yellow-500"><Icons.AlertTriangle /></span>
+                  )}
+                  {applyResult?.success === true && !applyResult.wasFuzzy && (
+                    <span className="text-green-500"><Icons.CheckCircle /></span>
+                  )}
+                  {applyResult?.success === false && (
+                    <span className="text-red-500"><Icons.XCircle /></span>
+                  )}
+                  {!validation.valid && (
+                    <span className="text-red-500"><Icons.XCircle /></span>
+                  )}
+                </>
               )}
             </div>
             
-            <button 
-              onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              className="p-1.5 rounded-lg hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-colors"
-            >
-              <Icons.Trash2 />
-            </button>
+            {isEditing ? (
+              <div className="flex items-center gap-1">
+                <button 
+                  onClick={handleSaveEdit}
+                  className="p-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 transition-colors"
+                  title="保存"
+                >
+                  <Icons.Save />
+                </button>
+                <button 
+                  onClick={handleCancelEdit}
+                  className="p-1.5 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-gray-400 transition-colors"
+                  title="取消"
+                >
+                  <Icons.X />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <button 
+                  onClick={handleStartEdit}
+                  className="p-1.5 rounded-lg hover:bg-violet-500/20 text-gray-500 hover:text-violet-400 transition-colors"
+                  title="编辑"
+                >
+                  <Icons.Edit />
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                  className="p-1.5 rounded-lg hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-colors"
+                  title="删除"
+                >
+                  <Icons.Trash2 />
+                </button>
+              </div>
+            )}
           </div>
           
           {expanded && (
             <div className="px-4 pb-4 space-y-4">
-              {(!validation.valid || validation.warnings.length > 0) && (
+              {!isEditing && (!validation.valid || validation.warnings.length > 0) && (
                 <div className="space-y-1">
                   {validation.errors.map((err, i) => (
                     <div key={i} className="flex items-center gap-2 text-sm text-red-400">
@@ -276,28 +554,132 @@
                 </div>
               )}
               
-              {applyResult && (
-                <div className={`flex items-center gap-2 text-sm ${applyResult.success ? 'text-green-400' : 'text-red-400'}`}>
-                  {applyResult.success ? <Icons.CheckCircle /> : <Icons.XCircle />}
-                  {applyResult.message}
+              {!isEditing && applyResult && (
+                <div>
+                  <div className={`flex items-center gap-2 text-sm ${applyResult.success ? (applyResult.wasFuzzy ? 'text-yellow-400' : 'text-green-400') : 'text-red-400'}`}>
+                    {applyResult.success ? <Icons.CheckCircle /> : <Icons.XCircle />}
+                    {applyResult.message}
+                  </div>
+                  
+                  {/* 显示调试信息 */}
+                  {!applyResult.success && applyResult.debugInfo && (
+                    <div className="mt-2 p-3 bg-black/30 rounded-lg border border-gray-700">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-gray-400">调试信息</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShowDebug(!showDebug); }}
+                          className="text-xs text-gray-500 hover:text-gray-300"
+                        >
+                          {showDebug ? '隐藏' : '显示'}
+                        </button>
+                      </div>
+                      {showDebug && (
+                        <div className="space-y-1 text-xs text-gray-500">
+                          <div>锚点长度: {applyResult.debugInfo.anchorLength} 字符</div>
+                          <div>包含Tab: {applyResult.debugInfo.hasTab ? '是 ⚠️' : '否'}</div>
+                          <div>行尾空白: {applyResult.debugInfo.hasTrailingSpace ? '是 ⚠️' : '否'}</div>
+                          <div>行数: {applyResult.debugInfo.lineCount}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* 显示相似内容 */}
+                  {!applyResult.success && applyResult.similar && applyResult.similar.length > 0 && (
+                    <div className="mt-2 p-3 bg-orange-500/10 rounded-lg border border-orange-500/30">
+                      <div className="text-xs font-medium text-orange-400 mb-2">
+                        找到 {applyResult.similar.length} 处相似内容：
+                      </div>
+                      {applyResult.similar.map((sim, idx) => (
+                        <div key={idx} className="mt-2 text-xs">
+                          <div className="text-gray-400 mb-1">行 {sim.line}:</div>
+                          <pre className="bg-black/30 rounded p-2 text-gray-300 overflow-x-auto font-mono text-xs">
+                            {sim.preview}
+                          </pre>
+                        </div>
+                      ))}
+                      <div className="mt-2 text-xs text-orange-300">
+                        💡 提示: 启用"宽松匹配"或检查空白字符差异
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               
-              {patch.operation !== 'CREATE' && (
+              {(isEditing ? editData.operation !== 'CREATE' : patch.operation !== 'CREATE') && (
                 <div>
-                  <div className="text-xs text-gray-500 mb-1.5 font-medium">ANCHOR</div>
-                  <pre className="bg-black/30 rounded-lg p-3 text-sm text-gray-300 overflow-x-auto font-mono leading-relaxed whitespace-pre">
-                    {patch.anchor}
-                  </pre>
+                  <div className="text-xs text-gray-500 mb-1.5 font-medium flex items-center justify-between">
+                    <span>ANCHOR</span>
+                    <div className="flex items-center gap-2">
+                      {!isEditing && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShowWhitespace(!showWhitespace); }}
+                          className="flex items-center gap-1 text-gray-600 hover:text-gray-400 transition-colors"
+                          title={showWhitespace ? "隐藏空白字符" : "显示空白字符"}
+                        >
+                          {showWhitespace ? <Icons.EyeOff /> : <Icons.Eye />}
+                          <span className="text-xs">{showWhitespace ? '隐藏空白' : '显示空白'}</span>
+                        </button>
+                      )}
+                      {isEditing && <span className="text-gray-600">Tab 键可插入缩进</span>}
+                    </div>
+                  </div>
+                  {isEditing ? (
+                    <textarea
+                      value={editData.anchor}
+                      onChange={(e) => setEditData(prev => ({ ...prev, anchor: e.target.value }))}
+                      onKeyDown={handleKeyDown}
+                      data-field="anchor"
+                      className="edit-area w-full bg-black/30 rounded-lg p-3 text-sm text-gray-300 font-mono leading-relaxed whitespace-pre border border-gray-600 focus:outline-none focus:border-violet-500 resize-y min-h-[100px]"
+                      placeholder="锚点内容..."
+                    />
+                  ) : (
+                    <pre className={`bg-black/30 rounded-lg p-3 text-sm text-gray-300 overflow-x-auto font-mono leading-relaxed ${showWhitespace ? 'whitespace-visible' : 'whitespace-pre'}`}>
+                      {showWhitespace ? visualizeWhitespace(patch.anchor) : patch.anchor}
+                    </pre>
+                  )}
                 </div>
               )}
               
-              {patch.content && (
+              {(isEditing ? (editData.operation !== 'DELETE' || editData.content) : patch.content) && (
                 <div>
-                  <div className="text-xs text-gray-500 mb-1.5 font-medium">CONTENT</div>
-                  <pre className="bg-black/30 rounded-lg p-3 text-sm text-green-300 overflow-x-auto font-mono leading-relaxed whitespace-pre">
-                    {patch.content}
-                  </pre>
+                  <div className="text-xs text-gray-500 mb-1.5 font-medium flex items-center justify-between">
+                    <span>CONTENT</span>
+                    {isEditing && <span className="text-gray-600">Tab 键可插入缩进</span>}
+                  </div>
+                  {isEditing ? (
+                    <textarea
+                      value={editData.content}
+                      onChange={(e) => setEditData(prev => ({ ...prev, content: e.target.value }))}
+                      onKeyDown={handleKeyDown}
+                      data-field="content"
+                      className="edit-area w-full bg-black/30 rounded-lg p-3 text-sm text-green-300 font-mono leading-relaxed whitespace-pre border border-gray-600 focus:outline-none focus:border-violet-500 resize-y min-h-[100px]"
+                      placeholder="新内容..."
+                    />
+                  ) : (
+                    <pre className="bg-black/30 rounded-lg p-3 text-sm text-green-300 overflow-x-auto font-mono leading-relaxed whitespace-pre">
+                      {patch.content}
+                    </pre>
+                  )}
+                </div>
+              )}
+
+              {isEditing && (
+                <div className="flex items-center gap-2 pt-2 border-t border-gray-700/50">
+                  <button
+                    onClick={handleSaveEdit}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 text-sm font-medium transition-colors"
+                  >
+                    <Icons.Save />
+                    保存修改
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-gray-400 text-sm font-medium transition-colors"
+                  >
+                    <Icons.X />
+                    取消
+                  </button>
                 </div>
               )}
             </div>
@@ -373,7 +755,7 @@
       };
 
       return (
-        <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg border ${colors[type]} animate-pulse`}>
+        <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg border ${colors[type]} animate-pulse z-50`}>
           {message}
         </div>
       );
@@ -388,6 +770,7 @@
       const [previewFile, setPreviewFile] = useState(null);
       const [toast, setToast] = useState(null);
       const [isDragging, setIsDragging] = useState(false);
+      const [fuzzyMatch, setFuzzyMatch] = useState(true); // 默认启用宽松匹配
       
       const showToast = (message, type = 'info') => {
         setToast({ message, type });
@@ -478,6 +861,11 @@
       const handleDeletePatch = useCallback((id) => {
         setPatches(prev => prev.filter(p => p.id !== id));
       }, []);
+
+      const handleUpdatePatch = useCallback((updatedPatch) => {
+        setPatches(prev => prev.map(p => p.id === updatedPatch.id ? updatedPatch : p));
+        showToast('补丁已更新', 'success');
+      }, []);
       
       const handlePreview = useCallback((fileName) => {
         const filePatches = patches.filter(p => p.file === fileName || p.file.endsWith('/' + fileName));
@@ -485,14 +873,14 @@
         let content = originalContent;
         
         for (const patch of filePatches) {
-          const result = simulateApply(content, patch);
+          const result = simulateApply(content, patch, fuzzyMatch);
           if (result.success) {
             content = result.result;
           }
         }
         
         setPreviewFile({ name: fileName, original: originalContent, modified: content, needsRefresh: false });
-      }, [patches, files]);
+      }, [patches, files, fuzzyMatch]);
 
       const handlePreviewCreate = useCallback((patch) => {
         setPreviewFile({ 
@@ -537,7 +925,7 @@
         let successCount = 0;
         
         for (const patch of filePatches) {
-          const result = simulateApply(content, patch);
+          const result = simulateApply(content, patch, fuzzyMatch);
           if (result.success) {
             content = result.result;
             successCount++;
@@ -557,7 +945,7 @@
         a.click();
         URL.revokeObjectURL(url);
         showToast(`已导出: ${fileName} (${successCount}/${filePatches.length} 补丁成功)`, 'success');
-      }, [patches, files]);
+      }, [patches, files, fuzzyMatch]);
       
       const handleCopyPatches = useCallback(() => {
         const text = patches.map(p => p.raw).join('\n\n');
@@ -619,13 +1007,24 @@
                   <Icons.Code />
                 </div>
                 <div>
-                  <h1 className="text-lg font-semibold">FIUP Tool</h1>
-                  <p className="text-xs text-gray-500 hidden sm:block">文件增量更新协议 v3.0</p>
+                  <h1 className="text-lg font-semibold">FIUP Tool v3.2</h1>
+                  <p className="text-xs text-gray-500 hidden sm:block">增强版 - 宽松匹配 + 调试工具</p>
                 </div>
               </div>
               
               <div className="flex items-center gap-3">
-                <span className="text-xs px-2 py-1 rounded bg-violet-500/20 text-violet-300 font-mono">```fiup</span>
+                <button
+                  onClick={() => setFuzzyMatch(!fuzzyMatch)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    fuzzyMatch 
+                      ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' 
+                      : 'bg-gray-800/50 text-gray-400 border border-gray-700'
+                  }`}
+                  title={fuzzyMatch ? "已启用宽松匹配（忽略空白差异）" : "已禁用宽松匹配（精确匹配）"}
+                >
+                  <Icons.Zap />
+                  <span className="hidden sm:inline">宽松匹配</span>
+                </button>
                 <a 
                   href="https://github.com/Thankyou-Cheems/FIUP" 
                   target="_blank"
@@ -639,6 +1038,30 @@
           </header>
           
           <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+            {/* 宽松匹配说明横幅 */}
+            {fuzzyMatch && (
+              <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5">
+                    <Icons.Zap />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-medium text-yellow-300 mb-1">宽松匹配已启用</h3>
+                    <p className="text-xs text-yellow-200/80 leading-relaxed">
+                      将自动忽略锚点与源文件之间的空白字符差异（Tab/空格、行尾空白等）。
+                      如遇到匹配失败，工具会显示相似内容和调试信息帮助您定位问题。
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setFuzzyMatch(false)}
+                    className="text-xs text-yellow-400 hover:text-yellow-300"
+                  >
+                    关闭
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col lg:flex-row gap-6">
               <div className="lg:w-72 xl:w-80 flex-shrink-0">
                 <div className="lg:sticky lg:top-24 space-y-4">
@@ -840,14 +1263,17 @@ def new_function(name: str):
 <<<END>>>
 \`\`\`
 
-支持的操作: REPLACE, INSERT_AFTER, INSERT_BEFORE, DELETE, CREATE`}
+💡 v3.2 新功能:
+- 启用"宽松匹配"自动处理空白字符差异
+- 显示相似内容和调试信息
+- 空白字符可视化`}
                   className="w-full h-80 sm:h-96 bg-gray-900/50 border border-gray-700/50 rounded-xl p-4 font-mono text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 resize-none"
                 />
                 
                 <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
                   <span>✓ 从 AI 对话粘贴</span>
                   <span>✓ 自动识别 ```fiup 代码块</span>
-                  <span>✓ 保留原始缩进</span>
+                  <span>✓ 宽松匹配空白字符</span>
                 </div>
               </div>
             )}
@@ -874,6 +1300,11 @@ def new_function(name: str):
                     </button>
                   </div>
                 )}
+
+                <div className="flex items-center gap-2 p-3 bg-violet-500/10 border border-violet-500/30 rounded-lg text-sm text-violet-300">
+                  <Icons.Info />
+                  <span>展开补丁卡片查看详细信息和调试工具，点击编辑按钮可修改内容</span>
+                </div>
                 
                 <div className="space-y-3">
                   {patches.length === 0 ? (
@@ -891,7 +1322,9 @@ def new_function(name: str):
                         expanded={expandedPatch === patch.id}
                         onToggle={() => setExpandedPatch(expandedPatch === patch.id ? null : patch.id)}
                         onDelete={() => handleDeletePatch(patch.id)}
+                        onUpdate={handleUpdatePatch}
                         fileContent={files[patch.file] || files[patch.file.split('/').pop()]}
+                        fuzzyMatch={fuzzyMatch}
                       />
                     ))
                   )}
@@ -992,8 +1425,8 @@ def new_function(name: str):
           
           <footer className="border-t border-gray-800/50 mt-auto">
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between text-sm text-gray-500 flex-wrap gap-2">
-              <span>FIUP Tool v3.0</span>
-              <span className="hidden sm:inline">基于文本锚点的代码修改协议</span>
+              <span>FIUP Tool v3.2</span>
+              <span className="hidden sm:inline">宽松匹配 · 调试工具 · 空白可视化</span>
               <a href="https://github.com/Thankyou-Cheems" target="_blank" className="hover:text-gray-300 transition-colors">猹Cheems</a>
             </div>
           </footer>
