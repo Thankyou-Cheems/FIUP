@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FIUP Tool v3.2 - 增强版（宽松匹配）</title>
+  <title>FIUP Tool v3.3 - 增量补丁 + 多目标定位</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -37,21 +37,9 @@
     ::-webkit-scrollbar-thumb { background: #3a3a4a; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #5a5a6a; }
     textarea.edit-area { tab-size: 2; }
-    .whitespace-visible {
-      white-space: pre;
-    }
-    .whitespace-visible .space::before {
-      content: '·';
-      color: #3a3a4a;
-    }
-    .whitespace-visible .tab::before {
-      content: '→';
-      color: #5a5a6a;
-    }
-    .whitespace-visible .newline::after {
-      content: '↵';
-      color: #3a3a4a;
-    }
+    .whitespace-visible { white-space: pre; }
+    .whitespace-visible .space::before { content: '·'; color: #3a3a4a; }
+    .whitespace-visible .tab::before { content: '→'; color: #5a5a6a; }
   </style>
 </head>
 <body>
@@ -81,12 +69,14 @@
       Edit: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
       Save: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
       X: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
-      Search: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>,
       Info: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
       Zap: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+      Layers: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>,
+      Target: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
+      MapPin: () => <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
     };
 
-    // FIUP v3.0 解析器（无缩进转换）
+    // FIUP v3.0 解析器
     const parseFIUP = (text) => {
       let content = text;
       const codeBlockPattern = /```(?:fiup)?\s*\n([\s\S]*?)```/g;
@@ -95,9 +85,7 @@
       while ((match = codeBlockPattern.exec(text)) !== null) {
         extracted += match[1] + '\n';
       }
-      if (extracted) {
-        content = extracted;
-      }
+      if (extracted) content = extracted;
       
       const patches = [];
       const blockPattern = /<<<FIUP>>>([\s\S]*?)<<<END>>>/g;
@@ -116,14 +104,10 @@
         let contentText = '';
         
         const anchorMatch = inner.match(/\[ANCHOR\]\s*\n([\s\S]*?)(?=\[CONTENT\]|$)/);
-        if (anchorMatch) {
-          anchor = anchorMatch[1].replace(/\n$/, '');
-        }
+        if (anchorMatch) anchor = anchorMatch[1].replace(/\n$/, '');
         
         const contentMatch = inner.match(/\[CONTENT\]\s*\n([\s\S]*?)$/);
-        if (contentMatch) {
-          contentText = contentMatch[1].replace(/\n$/, '');
-        }
+        if (contentMatch) contentText = contentMatch[1].replace(/\n$/, '');
         
         patches.push({
           id: crypto.randomUUID(),
@@ -131,7 +115,8 @@
           operation,
           anchor,
           content: contentText,
-          raw: block
+          raw: block,
+          selectedMatchIndex: null // 用于多目标匹配时选择
         });
       }
       
@@ -167,20 +152,60 @@ ${patch.content}`;
     };
 
     // ============================================================================
-    // 改进的匹配函数 - 支持宽松模式
+    // 改进的匹配函数 - 支持多目标定位
     // ============================================================================
     
-    // 标准化文本（用于宽松匹配）
     const normalizeWhitespace = (text) => {
       return text
         .split('\n')
-        .map(line => line.trimEnd()) // 移除行尾空白
+        .map(line => line.trimEnd())
         .join('\n')
-        .replace(/[ \t]+/g, ' '); // 统一所有空白为单个空格
+        .replace(/[ \t]+/g, ' ');
     };
 
-    // 查找最相似的文本片段
-    const findSimilarContent = (content, anchor, maxResults = 3) => {
+    // 查找所有匹配位置
+    const findAllMatches = (content, anchor, fuzzyMatch = false) => {
+      const normalizedContent = content.replace(/\r\n/g, '\n');
+      const normalizedAnchor = anchor.replace(/\r\n/g, '\n');
+      
+      let searchContent = normalizedContent;
+      let searchAnchor = normalizedAnchor;
+      
+      if (fuzzyMatch) {
+        searchContent = normalizeWhitespace(normalizedContent);
+        searchAnchor = normalizeWhitespace(normalizedAnchor);
+      }
+      
+      const matches = [];
+      let pos = 0;
+      
+      while ((pos = searchContent.indexOf(searchAnchor, pos)) !== -1) {
+        // 计算行号
+        const beforeText = normalizedContent.substring(0, pos);
+        const line = beforeText.split('\n').length;
+        
+        // 获取上下文预览
+        const contentLines = normalizedContent.split('\n');
+        const startLine = Math.max(0, line - 2);
+        const endLine = Math.min(contentLines.length, line + normalizedAnchor.split('\n').length + 1);
+        const preview = contentLines.slice(startLine, endLine).join('\n');
+        
+        matches.push({
+          position: pos,
+          line,
+          preview,
+          startLine: startLine + 1,
+          endLine
+        });
+        
+        pos += 1; // 继续搜索下一个匹配
+      }
+      
+      return matches;
+    };
+
+    // 查找相似内容（首行匹配）
+    const findSimilarContent = (content, anchor, maxResults = 5) => {
       const anchorLines = anchor.split('\n').filter(l => l.trim());
       if (anchorLines.length === 0) return [];
       
@@ -200,7 +225,8 @@ ${patch.content}`;
       return matches.slice(0, maxResults);
     };
 
-    const simulateApply = (content, patch, fuzzyMatch = false) => {
+    // 应用补丁（支持指定匹配索引）
+    const simulateApply = (content, patch, fuzzyMatch = false, matchIndex = null) => {
       if (patch.operation === 'CREATE') {
         return { 
           success: true, 
@@ -216,15 +242,15 @@ ${patch.content}`;
       let searchContent = normalizedContent;
       let searchAnchor = normalizedAnchor;
       
-      // 宽松模式：标准化空白字符
       if (fuzzyMatch) {
         searchContent = normalizeWhitespace(normalizedContent);
         searchAnchor = normalizeWhitespace(normalizedAnchor);
       }
       
-      const pos = searchContent.indexOf(searchAnchor);
-      if (pos === -1) {
-        // 查找相似内容
+      // 查找所有匹配
+      const allMatches = findAllMatches(normalizedContent, normalizedAnchor, fuzzyMatch);
+      
+      if (allMatches.length === 0) {
         const similar = findSimilarContent(normalizedContent, normalizedAnchor);
         return { 
           success: false, 
@@ -240,24 +266,29 @@ ${patch.content}`;
         };
       }
       
-      // 检查是否匹配多次
-      const secondPos = searchContent.indexOf(searchAnchor, pos + 1);
-      if (secondPos !== -1) {
-        return { success: false, message: '锚点匹配到多处', result: content };
+      // 多处匹配
+      if (allMatches.length > 1) {
+        // 如果指定了匹配索引，使用该位置
+        if (matchIndex !== null && matchIndex >= 0 && matchIndex < allMatches.length) {
+          // 使用指定的匹配位置继续
+        } else {
+          // 返回所有匹配位置供用户选择
+          return { 
+            success: false, 
+            message: `锚点匹配到 ${allMatches.length} 处`, 
+            result: content,
+            multipleMatches: allMatches,
+            matchCount: allMatches.length
+          };
+        }
       }
       
-      // 在原始内容中找到对应位置（考虑宽松匹配的差异）
-      let actualPos = pos;
-      if (fuzzyMatch && pos !== -1) {
-        // 需要在原始内容中定位
-        const beforeLines = searchContent.substring(0, pos).split('\n').length;
-        const contentLines = normalizedContent.split('\n');
-        actualPos = contentLines.slice(0, beforeLines - 1).join('\n').length;
-        if (beforeLines > 1) actualPos += 1; // 加上换行符
-      }
+      // 确定要使用的匹配位置
+      const targetMatch = matchIndex !== null ? allMatches[matchIndex] : allMatches[0];
+      const pos = targetMatch.position;
       
-      const before = normalizedContent.slice(0, actualPos);
-      const after = normalizedContent.slice(actualPos + normalizedAnchor.length);
+      const before = normalizedContent.slice(0, pos);
+      const after = normalizedContent.slice(pos + normalizedAnchor.length);
       let result;
       
       switch (patch.operation) {
@@ -282,10 +313,11 @@ ${patch.content}`;
       const line = before.split('\n').length;
       return { 
         success: true, 
-        message: `${fuzzyMatch ? '宽松匹配' : '精确匹配'} @ 行 ${line}`, 
+        message: `${fuzzyMatch ? '宽松匹配' : '精确匹配'} @ 行 ${line}${matchIndex !== null ? ` (第${matchIndex + 1}处)` : ''}`, 
         result, 
         line,
-        fuzzyMatched: fuzzyMatch
+        fuzzyMatched: fuzzyMatch,
+        usedMatchIndex: matchIndex
       };
     };
 
@@ -296,9 +328,7 @@ ${patch.content}`;
       if (!patch.file) errors.push('文件路径为空');
       
       if (patch.operation === 'CREATE') {
-        if (!patch.content?.trim()) {
-          errors.push('CREATE 操作但内容为空');
-        }
+        if (!patch.content?.trim()) errors.push('CREATE 操作但内容为空');
       } else {
         if (!patch.anchor?.trim()) errors.push('锚点内容为空');
         
@@ -309,17 +339,12 @@ ${patch.content}`;
           errors.push('非 DELETE/CREATE 操作但内容为空');
         }
         
-        // 检查空白字符问题
-        if (patch.anchor?.includes('\t')) {
-          warnings.push('锚点包含Tab字符，可能与空格混淆');
-        }
-        if (/[ \t]$/.test(patch.anchor)) {
-          warnings.push('锚点包含行尾空白，可能导致匹配失败');
-        }
+        if (patch.anchor?.includes('\t')) warnings.push('锚点包含Tab字符');
+        if (/[ \t]$/.test(patch.anchor)) warnings.push('锚点包含行尾空白');
       }
       
       if (patch.anchor?.includes('...') || patch.anchor?.includes('# ...')) {
-        warnings.push('锚点中包含 "..."，可能导致匹配失败');
+        warnings.push('锚点中包含 "..."');
       }
       
       return { valid: errors.length === 0, errors, warnings };
@@ -335,23 +360,30 @@ ${patch.content}`;
 
     const operations = ['REPLACE', 'INSERT_AFTER', 'INSERT_BEFORE', 'DELETE', 'CREATE'];
 
-    // 可视化空白字符
     const visualizeWhitespace = (text) => {
       if (!text) return null;
-      
       return text.split('').map((char, idx) => {
-        if (char === ' ') {
-          return <span key={idx} className="space">·</span>;
-        } else if (char === '\t') {
-          return <span key={idx} className="tab">→   </span>;
-        } else if (char === '\n') {
-          return <span key={idx}>{'\n'}</span>;
-        }
+        if (char === ' ') return <span key={idx} className="space">·</span>;
+        if (char === '\t') return <span key={idx} className="tab">→   </span>;
         return char;
       });
     };
 
-    const PatchCard = ({ patch, index, expanded, onToggle, onDelete, onUpdate, fileContent, fuzzyMatch }) => {
+    // ============================================================================
+    // PatchCard 组件 - 支持增量内容和多目标选择
+    // ============================================================================
+    const PatchCard = ({ 
+      patch, 
+      index, 
+      expanded, 
+      onToggle, 
+      onDelete, 
+      onUpdate, 
+      fileContent,        // 原始文件内容
+      accumulatedContent, // 累积内容（应用前序补丁后）
+      fuzzyMatch,
+      isIncremental       // 是否基于增量内容匹配
+    }) => {
       const [isEditing, setIsEditing] = useState(false);
       const [editData, setEditData] = useState({
         file: patch.file,
@@ -364,27 +396,32 @@ ${patch.content}`;
 
       const validation = useMemo(() => validatePatch(patch), [patch]);
       
-      // 先尝试精确匹配，失败则尝试宽松匹配
+      // 使用累积内容进行匹配（支持增量补丁）
+      const effectiveContent = accumulatedContent || fileContent;
+      
       const applyResult = useMemo(() => {
         if (patch.operation === 'CREATE') {
           return simulateApply('', patch, false);
         }
-        if (!fileContent) return null;
+        if (!effectiveContent) return null;
         
-        const exactResult = simulateApply(fileContent, patch, false);
-        if (exactResult.success) return exactResult;
+        // 先用累积内容尝试精确匹配
+        const exactResult = simulateApply(effectiveContent, patch, false, patch.selectedMatchIndex);
+        if (exactResult.success) {
+          return { ...exactResult, usedAccumulated: !!accumulatedContent };
+        }
         
         // 精确匹配失败，尝试宽松匹配
         if (fuzzyMatch) {
-          const fuzzyResult = simulateApply(fileContent, patch, true);
+          const fuzzyResult = simulateApply(effectiveContent, patch, true, patch.selectedMatchIndex);
           if (fuzzyResult.success) {
-            fuzzyResult.wasFuzzy = true;
-            return fuzzyResult;
+            return { ...fuzzyResult, wasFuzzy: true, usedAccumulated: !!accumulatedContent };
           }
+          return { ...fuzzyResult, usedAccumulated: !!accumulatedContent };
         }
         
-        return exactResult;
-      }, [fileContent, patch, fuzzyMatch]);
+        return { ...exactResult, usedAccumulated: !!accumulatedContent };
+      }, [effectiveContent, patch, fuzzyMatch, accumulatedContent]);
       
       const color = opColors[patch.operation] || opColors.REPLACE;
 
@@ -409,10 +446,15 @@ ${patch.content}`;
         const updatedPatch = {
           ...patch,
           ...editData,
-          raw: generateRaw(editData)
+          raw: generateRaw(editData),
+          selectedMatchIndex: null // 重置选择
         };
         onUpdate(updatedPatch);
         setIsEditing(false);
+      };
+
+      const handleSelectMatch = (matchIdx) => {
+        onUpdate({ ...patch, selectedMatchIndex: matchIdx });
       };
 
       const handleKeyDown = (e) => {
@@ -444,16 +486,16 @@ ${patch.content}`;
               {expanded ? <Icons.ChevronDown /> : <Icons.ChevronRight />}
             </div>
             
+            <span className="text-gray-600 text-xs font-mono w-6">#{index + 1}</span>
+            
             {isEditing ? (
               <select
                 value={editData.operation}
                 onChange={(e) => setEditData(prev => ({ ...prev, operation: e.target.value }))}
                 onClick={(e) => e.stopPropagation()}
-                className={`px-2 py-0.5 rounded text-xs font-mono font-medium ${color.text} bg-black/30 border ${color.border} cursor-pointer focus:outline-none focus:ring-1 focus:ring-violet-500`}
+                className={`px-2 py-0.5 rounded text-xs font-mono font-medium ${color.text} bg-black/30 border ${color.border}`}
               >
-                {operations.map(op => (
-                  <option key={op} value={op}>{op}</option>
-                ))}
+                {operations.map(op => <option key={op} value={op}>{op}</option>)}
               </select>
             ) : (
               <span className={`px-2 py-0.5 rounded text-xs font-mono font-medium ${color.text} ${color.bg} border ${color.border}`}>
@@ -467,33 +509,38 @@ ${patch.content}`;
                 value={editData.file}
                 onChange={(e) => setEditData(prev => ({ ...prev, file: e.target.value }))}
                 onClick={(e) => e.stopPropagation()}
-                className="text-gray-300 font-mono text-sm flex-1 bg-black/30 border border-gray-600 rounded px-2 py-0.5 focus:outline-none focus:border-violet-500"
+                className="text-gray-300 font-mono text-sm flex-1 bg-black/30 border border-gray-600 rounded px-2 py-0.5"
                 placeholder="文件路径"
               />
             ) : (
-              <span className="text-gray-300 font-mono text-sm flex-1 truncate">
-                {patch.file}
-              </span>
+              <span className="text-gray-300 font-mono text-sm flex-1 truncate">{patch.file}</span>
             )}
             
             <div className="flex items-center gap-2">
               {!isEditing && (
                 <>
+                  {applyResult?.usedAccumulated && applyResult?.success && (
+                    <span className="flex items-center gap-1 text-cyan-400 text-xs" title="基于增量内容匹配">
+                      <Icons.Layers />
+                    </span>
+                  )}
                   {applyResult?.wasFuzzy && (
-                    <span className="flex items-center gap-1 text-yellow-500 text-xs" title="使用了宽松匹配">
+                    <span className="flex items-center gap-1 text-yellow-500 text-xs" title="宽松匹配">
                       <Icons.Zap />
+                    </span>
+                  )}
+                  {patch.selectedMatchIndex !== null && (
+                    <span className="flex items-center gap-1 text-orange-400 text-xs" title={`已选择第${patch.selectedMatchIndex + 1}处匹配`}>
+                      <Icons.Target />
                     </span>
                   )}
                   {validation.warnings.length > 0 && (
                     <span className="text-yellow-500"><Icons.AlertTriangle /></span>
                   )}
-                  {applyResult?.success === true && !applyResult.wasFuzzy && (
+                  {applyResult?.success === true && (
                     <span className="text-green-500"><Icons.CheckCircle /></span>
                   )}
                   {applyResult?.success === false && (
-                    <span className="text-red-500"><Icons.XCircle /></span>
-                  )}
-                  {!validation.valid && (
                     <span className="text-red-500"><Icons.XCircle /></span>
                   )}
                 </>
@@ -502,37 +549,13 @@ ${patch.content}`;
             
             {isEditing ? (
               <div className="flex items-center gap-1">
-                <button 
-                  onClick={handleSaveEdit}
-                  className="p-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 transition-colors"
-                  title="保存"
-                >
-                  <Icons.Save />
-                </button>
-                <button 
-                  onClick={handleCancelEdit}
-                  className="p-1.5 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-gray-400 transition-colors"
-                  title="取消"
-                >
-                  <Icons.X />
-                </button>
+                <button onClick={handleSaveEdit} className="p-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400"><Icons.Save /></button>
+                <button onClick={handleCancelEdit} className="p-1.5 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-gray-400"><Icons.X /></button>
               </div>
             ) : (
               <div className="flex items-center gap-1">
-                <button 
-                  onClick={handleStartEdit}
-                  className="p-1.5 rounded-lg hover:bg-violet-500/20 text-gray-500 hover:text-violet-400 transition-colors"
-                  title="编辑"
-                >
-                  <Icons.Edit />
-                </button>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                  className="p-1.5 rounded-lg hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-colors"
-                  title="删除"
-                >
-                  <Icons.Trash2 />
-                </button>
+                <button onClick={handleStartEdit} className="p-1.5 rounded-lg hover:bg-violet-500/20 text-gray-500 hover:text-violet-400"><Icons.Edit /></button>
+                <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 rounded-lg hover:bg-red-500/20 text-gray-500 hover:text-red-400"><Icons.Trash2 /></button>
               </div>
             )}
           </div>
@@ -542,14 +565,10 @@ ${patch.content}`;
               {!isEditing && (!validation.valid || validation.warnings.length > 0) && (
                 <div className="space-y-1">
                   {validation.errors.map((err, i) => (
-                    <div key={i} className="flex items-center gap-2 text-sm text-red-400">
-                      <Icons.XCircle /> {err}
-                    </div>
+                    <div key={i} className="flex items-center gap-2 text-sm text-red-400"><Icons.XCircle /> {err}</div>
                   ))}
                   {validation.warnings.map((warn, i) => (
-                    <div key={i} className="flex items-center gap-2 text-sm text-yellow-500">
-                      <Icons.AlertTriangle /> {warn}
-                    </div>
+                    <div key={i} className="flex items-center gap-2 text-sm text-yellow-500"><Icons.AlertTriangle /> {warn}</div>
                   ))}
                 </div>
               )}
@@ -559,17 +578,56 @@ ${patch.content}`;
                   <div className={`flex items-center gap-2 text-sm ${applyResult.success ? (applyResult.wasFuzzy ? 'text-yellow-400' : 'text-green-400') : 'text-red-400'}`}>
                     {applyResult.success ? <Icons.CheckCircle /> : <Icons.XCircle />}
                     {applyResult.message}
+                    {applyResult.usedAccumulated && applyResult.success && (
+                      <span className="text-xs text-cyan-400 ml-2">(增量模式)</span>
+                    )}
                   </div>
                   
-                  {/* 显示调试信息 */}
-                  {!applyResult.success && applyResult.debugInfo && (
+                  {/* 多目标匹配选择器 */}
+                  {!applyResult.success && applyResult.multipleMatches && (
+                    <div className="mt-3 p-4 bg-orange-500/10 rounded-lg border border-orange-500/30">
+                      <div className="flex items-center gap-2 text-sm font-medium text-orange-300 mb-3">
+                        <Icons.Target />
+                        找到 {applyResult.matchCount} 处匹配，请选择要应用的位置：
+                      </div>
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {applyResult.multipleMatches.map((match, idx) => (
+                          <div 
+                            key={idx}
+                            className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                              patch.selectedMatchIndex === idx 
+                                ? 'bg-orange-500/20 border-orange-500/50' 
+                                : 'bg-black/20 border-gray-700 hover:border-orange-500/30'
+                            }`}
+                            onClick={(e) => { e.stopPropagation(); handleSelectMatch(idx); }}
+                          >
+                            <div className="flex items-center gap-2 mb-2">
+                              <Icons.MapPin />
+                              <span className="text-sm font-medium text-orange-300">
+                                位置 {idx + 1}: 行 {match.line}
+                              </span>
+                              {patch.selectedMatchIndex === idx && (
+                                <span className="text-xs bg-orange-500/30 px-2 py-0.5 rounded text-orange-200">已选择</span>
+                              )}
+                            </div>
+                            <pre className="text-xs text-gray-400 bg-black/30 rounded p-2 overflow-x-auto whitespace-pre font-mono">
+                              {match.preview}
+                            </pre>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 text-xs text-orange-200/70">
+                        💡 点击选择要应用补丁的位置，或修改锚点使其更加唯一
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 调试信息 */}
+                  {!applyResult.success && applyResult.debugInfo && !applyResult.multipleMatches && (
                     <div className="mt-2 p-3 bg-black/30 rounded-lg border border-gray-700">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-medium text-gray-400">调试信息</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setShowDebug(!showDebug); }}
-                          className="text-xs text-gray-500 hover:text-gray-300"
-                        >
+                        <button onClick={(e) => { e.stopPropagation(); setShowDebug(!showDebug); }} className="text-xs text-gray-500 hover:text-gray-300">
                           {showDebug ? '隐藏' : '显示'}
                         </button>
                       </div>
@@ -584,23 +642,16 @@ ${patch.content}`;
                     </div>
                   )}
                   
-                  {/* 显示相似内容 */}
-                  {!applyResult.success && applyResult.similar && applyResult.similar.length > 0 && (
-                    <div className="mt-2 p-3 bg-orange-500/10 rounded-lg border border-orange-500/30">
-                      <div className="text-xs font-medium text-orange-400 mb-2">
-                        找到 {applyResult.similar.length} 处相似内容：
-                      </div>
+                  {/* 相似内容提示 */}
+                  {!applyResult.success && applyResult.similar && !applyResult.multipleMatches && (
+                    <div className="mt-2 p-3 bg-blue-500/10 rounded-lg border border-blue-500/30">
+                      <div className="text-xs font-medium text-blue-400 mb-2">首行相似内容：</div>
                       {applyResult.similar.map((sim, idx) => (
                         <div key={idx} className="mt-2 text-xs">
                           <div className="text-gray-400 mb-1">行 {sim.line}:</div>
-                          <pre className="bg-black/30 rounded p-2 text-gray-300 overflow-x-auto font-mono text-xs">
-                            {sim.preview}
-                          </pre>
+                          <pre className="bg-black/30 rounded p-2 text-gray-300 overflow-x-auto font-mono text-xs">{sim.preview}</pre>
                         </div>
                       ))}
-                      <div className="mt-2 text-xs text-orange-300">
-                        💡 提示: 启用"宽松匹配"或检查空白字符差异
-                      </div>
                     </div>
                   )}
                 </div>
@@ -610,19 +661,12 @@ ${patch.content}`;
                 <div>
                   <div className="text-xs text-gray-500 mb-1.5 font-medium flex items-center justify-between">
                     <span>ANCHOR</span>
-                    <div className="flex items-center gap-2">
-                      {!isEditing && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setShowWhitespace(!showWhitespace); }}
-                          className="flex items-center gap-1 text-gray-600 hover:text-gray-400 transition-colors"
-                          title={showWhitespace ? "隐藏空白字符" : "显示空白字符"}
-                        >
-                          {showWhitespace ? <Icons.EyeOff /> : <Icons.Eye />}
-                          <span className="text-xs">{showWhitespace ? '隐藏空白' : '显示空白'}</span>
-                        </button>
-                      )}
-                      {isEditing && <span className="text-gray-600">Tab 键可插入缩进</span>}
-                    </div>
+                    {!isEditing && (
+                      <button onClick={(e) => { e.stopPropagation(); setShowWhitespace(!showWhitespace); }} className="flex items-center gap-1 text-gray-600 hover:text-gray-400">
+                        {showWhitespace ? <Icons.EyeOff /> : <Icons.Eye />}
+                        <span className="text-xs">{showWhitespace ? '隐藏空白' : '显示空白'}</span>
+                      </button>
+                    )}
                   </div>
                   {isEditing ? (
                     <textarea
@@ -630,8 +674,7 @@ ${patch.content}`;
                       onChange={(e) => setEditData(prev => ({ ...prev, anchor: e.target.value }))}
                       onKeyDown={handleKeyDown}
                       data-field="anchor"
-                      className="edit-area w-full bg-black/30 rounded-lg p-3 text-sm text-gray-300 font-mono leading-relaxed whitespace-pre border border-gray-600 focus:outline-none focus:border-violet-500 resize-y min-h-[100px]"
-                      placeholder="锚点内容..."
+                      className="edit-area w-full bg-black/30 rounded-lg p-3 text-sm text-gray-300 font-mono leading-relaxed whitespace-pre border border-gray-600 focus:border-violet-500 resize-y min-h-[100px]"
                     />
                   ) : (
                     <pre className={`bg-black/30 rounded-lg p-3 text-sm text-gray-300 overflow-x-auto font-mono leading-relaxed ${showWhitespace ? 'whitespace-visible' : 'whitespace-pre'}`}>
@@ -643,42 +686,28 @@ ${patch.content}`;
               
               {(isEditing ? (editData.operation !== 'DELETE' || editData.content) : patch.content) && (
                 <div>
-                  <div className="text-xs text-gray-500 mb-1.5 font-medium flex items-center justify-between">
-                    <span>CONTENT</span>
-                    {isEditing && <span className="text-gray-600">Tab 键可插入缩进</span>}
-                  </div>
+                  <div className="text-xs text-gray-500 mb-1.5 font-medium">CONTENT</div>
                   {isEditing ? (
                     <textarea
                       value={editData.content}
                       onChange={(e) => setEditData(prev => ({ ...prev, content: e.target.value }))}
                       onKeyDown={handleKeyDown}
                       data-field="content"
-                      className="edit-area w-full bg-black/30 rounded-lg p-3 text-sm text-green-300 font-mono leading-relaxed whitespace-pre border border-gray-600 focus:outline-none focus:border-violet-500 resize-y min-h-[100px]"
-                      placeholder="新内容..."
+                      className="edit-area w-full bg-black/30 rounded-lg p-3 text-sm text-green-300 font-mono leading-relaxed whitespace-pre border border-gray-600 focus:border-violet-500 resize-y min-h-[100px]"
                     />
                   ) : (
-                    <pre className="bg-black/30 rounded-lg p-3 text-sm text-green-300 overflow-x-auto font-mono leading-relaxed whitespace-pre">
-                      {patch.content}
-                    </pre>
+                    <pre className="bg-black/30 rounded-lg p-3 text-sm text-green-300 overflow-x-auto font-mono leading-relaxed whitespace-pre">{patch.content}</pre>
                   )}
                 </div>
               )}
 
               {isEditing && (
                 <div className="flex items-center gap-2 pt-2 border-t border-gray-700/50">
-                  <button
-                    onClick={handleSaveEdit}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 text-sm font-medium transition-colors"
-                  >
-                    <Icons.Save />
-                    保存修改
+                  <button onClick={handleSaveEdit} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 text-sm font-medium">
+                    <Icons.Save /> 保存修改
                   </button>
-                  <button
-                    onClick={handleCancelEdit}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-gray-400 text-sm font-medium transition-colors"
-                  >
-                    <Icons.X />
-                    取消
+                  <button onClick={handleCancelEdit} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-gray-400 text-sm font-medium">
+                    <Icons.X /> 取消
                   </button>
                 </div>
               )}
@@ -716,23 +745,10 @@ ${patch.content}`;
           <div className="overflow-x-auto max-h-96">
             <pre className="text-sm font-mono">
               {diff.map((line, idx) => (
-                <div 
-                  key={idx}
-                  className={`px-4 py-0.5 flex ${
-                    line.type === 'add' ? 'bg-green-500/10 text-green-300' :
-                    line.type === 'del' ? 'bg-red-500/10 text-red-300' :
-                    'text-gray-400'
-                  }`}
-                >
-                  <span className="w-12 text-gray-600 select-none text-right pr-2">
-                    {line.lineOld || ''}
-                  </span>
-                  <span className="w-12 text-gray-600 select-none text-right pr-2">
-                    {line.lineNew || ''}
-                  </span>
-                  <span className="w-6 select-none">
-                    {line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' '}
-                  </span>
+                <div key={idx} className={`px-4 py-0.5 flex ${line.type === 'add' ? 'bg-green-500/10 text-green-300' : line.type === 'del' ? 'bg-red-500/10 text-red-300' : 'text-gray-400'}`}>
+                  <span className="w-12 text-gray-600 select-none text-right pr-2">{line.lineOld || ''}</span>
+                  <span className="w-12 text-gray-600 select-none text-right pr-2">{line.lineNew || ''}</span>
+                  <span className="w-6 select-none">{line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' '}</span>
                   <span className="flex-1 whitespace-pre">{line.content}</span>
                 </div>
               ))}
@@ -755,12 +771,13 @@ ${patch.content}`;
       };
 
       return (
-        <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg border ${colors[type]} animate-pulse z-50`}>
-          {message}
-        </div>
+        <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg border ${colors[type]} z-50`}>{message}</div>
       );
     };
 
+    // ============================================================================
+    // 主应用组件
+    // ============================================================================
     function FIUPApp() {
       const [patchText, setPatchText] = useState('');
       const [patches, setPatches] = useState([]);
@@ -770,11 +787,51 @@ ${patch.content}`;
       const [previewFile, setPreviewFile] = useState(null);
       const [toast, setToast] = useState(null);
       const [isDragging, setIsDragging] = useState(false);
-      const [fuzzyMatch, setFuzzyMatch] = useState(true); // 默认启用宽松匹配
+      const [fuzzyMatch, setFuzzyMatch] = useState(true);
+      const [incrementalMode, setIncrementalMode] = useState(true); // 新增：增量模式开关
       
-      const showToast = (message, type = 'info') => {
-        setToast({ message, type });
-      };
+      const showToast = (message, type = 'info') => setToast({ message, type });
+      
+      // ============================================================================
+      // 计算每个补丁的累积内容（关键修复）
+      // ============================================================================
+      const accumulatedContents = useMemo(() => {
+        if (!incrementalMode) return {};
+        
+        const result = {};
+        const fileContents = {}; // 每个文件的当前累积内容
+        
+        patches.forEach((patch, index) => {
+          const fileName = patch.file;
+          const shortName = fileName.split('/').pop();
+          
+          // 获取原始文件内容
+          const originalContent = files[fileName] || files[shortName] || '';
+          
+          // 如果是第一个操作该文件的补丁，使用原始内容
+          if (!fileContents[fileName]) {
+            fileContents[fileName] = originalContent;
+          }
+          
+          // CREATE 操作特殊处理
+          if (patch.operation === 'CREATE') {
+            result[patch.id] = '';
+            fileContents[fileName] = patch.content;
+            return;
+          }
+          
+          // 记录当前补丁应该使用的累积内容
+          result[patch.id] = fileContents[fileName];
+          
+          // 应用当前补丁，更新累积内容
+          const applyResult = simulateApply(fileContents[fileName], patch, fuzzyMatch, patch.selectedMatchIndex);
+          if (applyResult.success) {
+            fileContents[fileName] = applyResult.result;
+          }
+        });
+        
+        return result;
+      }, [patches, files, fuzzyMatch, incrementalMode]);
       
       const handleParse = useCallback(() => {
         const parsed = parseFIUP(patchText);
@@ -790,18 +847,10 @@ ${patch.content}`;
       
       const handleFileUpload = useCallback((e) => {
         const uploadedFiles = Array.from(e.target.files);
-        if (uploadedFiles.length === 0) return;
         uploadedFiles.forEach(file => {
           const reader = new FileReader();
           reader.onload = (event) => {
-            const content = event.target.result;
-            setFiles(prev => ({ ...prev, [file.name]: content }));
-            setPreviewFile(prev => {
-              if (prev && prev.name === file.name) {
-                return { ...prev, original: content, needsRefresh: true };
-              }
-              return prev;
-            });
+            setFiles(prev => ({ ...prev, [file.name]: event.target.result }));
             showToast(`已加载文件: ${file.name}`, 'success');
           };
           reader.readAsText(file);
@@ -809,41 +858,15 @@ ${patch.content}`;
         e.target.value = '';
       }, []);
 
-      const handleDragOver = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(true);
-      }, []);
-
-      const handleDragLeave = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(false);
-      }, []);
-
       const handleDrop = useCallback((e) => {
         e.preventDefault();
-        e.stopPropagation();
         setIsDragging(false);
-        
-        const droppedFiles = Array.from(e.dataTransfer.files);
-        if (droppedFiles.length === 0) return;
-        
-        droppedFiles.forEach(file => {
+        Array.from(e.dataTransfer.files).forEach(file => {
           const reader = new FileReader();
-          reader.onload = (event) => {
-            const content = event.target.result;
-            setFiles(prev => ({ ...prev, [file.name]: content }));
-            setPreviewFile(prev => {
-              if (prev && prev.name === file.name) {
-                return { ...prev, original: content, needsRefresh: true };
-              }
-              return prev;
-            });
-          };
+          reader.onload = (event) => setFiles(prev => ({ ...prev, [file.name]: event.target.result }));
           reader.readAsText(file);
         });
-        showToast(`已加载 ${droppedFiles.length} 个文件`, 'success');
+        showToast(`已加载文件`, 'success');
       }, []);
 
       const handleDeleteFile = useCallback((fileName) => {
@@ -852,11 +875,8 @@ ${patch.content}`;
           delete newFiles[fileName];
           return newFiles;
         });
-        if (previewFile?.name === fileName) {
-          setPreviewFile(null);
-        }
         showToast(`已移除文件: ${fileName}`, 'info');
-      }, [previewFile]);
+      }, []);
       
       const handleDeletePatch = useCallback((id) => {
         setPatches(prev => prev.filter(p => p.id !== id));
@@ -873,30 +893,16 @@ ${patch.content}`;
         let content = originalContent;
         
         for (const patch of filePatches) {
-          const result = simulateApply(content, patch, fuzzyMatch);
-          if (result.success) {
-            content = result.result;
-          }
+          const result = simulateApply(content, patch, fuzzyMatch, patch.selectedMatchIndex);
+          if (result.success) content = result.result;
         }
         
-        setPreviewFile({ name: fileName, original: originalContent, modified: content, needsRefresh: false });
+        setPreviewFile({ name: fileName, original: originalContent, modified: content });
       }, [patches, files, fuzzyMatch]);
 
       const handlePreviewCreate = useCallback((patch) => {
-        setPreviewFile({ 
-          name: patch.file, 
-          original: '', 
-          modified: patch.content, 
-          needsRefresh: false,
-          isCreate: true
-        });
+        setPreviewFile({ name: patch.file, original: '', modified: patch.content, isCreate: true });
       }, []);
-
-      React.useEffect(() => {
-        if (previewFile?.needsRefresh && previewFile.name) {
-          handlePreview(previewFile.name);
-        }
-      }, [previewFile?.needsRefresh, previewFile?.name, handlePreview]);
 
       const handleApplyAndDownload = useCallback((fileName) => {
         const filePatches = patches.filter(p => p.file === fileName || p.file.endsWith('/' + fileName));
@@ -915,7 +921,6 @@ ${patch.content}`;
         }
         
         const originalContent = files[fileName] || files[Object.keys(files).find(f => fileName.endsWith(f))] || '';
-        
         if (!originalContent) {
           showToast(`请先上传文件: ${fileName}`, 'error');
           return;
@@ -925,7 +930,7 @@ ${patch.content}`;
         let successCount = 0;
         
         for (const patch of filePatches) {
-          const result = simulateApply(content, patch, fuzzyMatch);
+          const result = simulateApply(content, patch, fuzzyMatch, patch.selectedMatchIndex);
           if (result.success) {
             content = result.result;
             successCount++;
@@ -967,35 +972,24 @@ ${patch.content}`;
       
       const stats = useMemo(() => {
         const byOp = { REPLACE: 0, INSERT_AFTER: 0, INSERT_BEFORE: 0, DELETE: 0, CREATE: 0 };
-        const byFile = {};
-        patches.forEach(p => {
-          if (byOp.hasOwnProperty(p.operation)) {
-            byOp[p.operation]++;
-          }
-          byFile[p.file] = (byFile[p.file] || 0) + 1;
-        });
-        return { byOp, byFile, total: patches.length };
+        patches.forEach(p => { if (byOp.hasOwnProperty(p.operation)) byOp[p.operation]++; });
+        return { byOp, total: patches.length };
       }, [patches]);
 
-      const createFiles = useMemo(() => {
-        return patches.filter(p => p.operation === 'CREATE').map(p => p.file);
-      }, [patches]);
+      const createFiles = useMemo(() => patches.filter(p => p.operation === 'CREATE').map(p => p.file), [patches]);
 
       return (
         <div 
-          className={`min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-white transition-colors ${isDragging ? 'ring-2 ring-inset ring-violet-500' : ''}`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
+          className={`min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-white ${isDragging ? 'ring-2 ring-inset ring-violet-500' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
           onDrop={handleDrop}
         >
           {isDragging && (
             <div className="fixed inset-0 bg-violet-500/10 backdrop-blur-sm z-50 flex items-center justify-center pointer-events-none">
               <div className="bg-gray-900/90 border-2 border-dashed border-violet-500 rounded-2xl p-12 text-center">
-                <div className="text-violet-400 mb-4">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                </div>
-                <p className="text-xl font-medium text-white">释放文件以上传</p>
-                <p className="text-gray-400 text-sm mt-2">支持多文件同时上传</p>
+                <Icons.Upload />
+                <p className="text-xl font-medium text-white mt-4">释放文件以上传</p>
               </div>
             </div>
           )}
@@ -1007,30 +1001,33 @@ ${patch.content}`;
                   <Icons.Code />
                 </div>
                 <div>
-                  <h1 className="text-lg font-semibold">FIUP Tool v3.2</h1>
-                  <p className="text-xs text-gray-500 hidden sm:block">增强版 - 宽松匹配 + 调试工具</p>
+                  <h1 className="text-lg font-semibold">FIUP Tool v3.3</h1>
+                  <p className="text-xs text-gray-500 hidden sm:block">增量补丁 + 多目标定位</p>
                 </div>
               </div>
               
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIncrementalMode(!incrementalMode)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    incrementalMode ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-gray-800/50 text-gray-400 border border-gray-700'
+                  }`}
+                  title={incrementalMode ? "增量模式：补丁基于前序补丁的结果匹配" : "独立模式：每个补丁独立匹配原始文件"}
+                >
+                  <Icons.Layers />
+                  <span className="hidden sm:inline">增量</span>
+                </button>
                 <button
                   onClick={() => setFuzzyMatch(!fuzzyMatch)}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    fuzzyMatch 
-                      ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' 
-                      : 'bg-gray-800/50 text-gray-400 border border-gray-700'
+                    fuzzyMatch ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'bg-gray-800/50 text-gray-400 border border-gray-700'
                   }`}
-                  title={fuzzyMatch ? "已启用宽松匹配（忽略空白差异）" : "已禁用宽松匹配（精确匹配）"}
+                  title={fuzzyMatch ? "宽松匹配：忽略空白差异" : "精确匹配"}
                 >
                   <Icons.Zap />
-                  <span className="hidden sm:inline">宽松匹配</span>
+                  <span className="hidden sm:inline">宽松</span>
                 </button>
-                <a 
-                  href="https://github.com/Thankyou-Cheems/FIUP" 
-                  target="_blank"
-                  className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white transition-colors"
-                  title="GitHub 仓库"
-                >
+                <a href="https://github.com/Thankyou-Cheems/FIUP" target="_blank" className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white">
                   <Icons.Github />
                 </a>
               </div>
@@ -1038,113 +1035,67 @@ ${patch.content}`;
           </header>
           
           <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-            {/* 宽松匹配说明横幅 */}
-            {fuzzyMatch && (
-              <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
+            {/* 功能说明横幅 */}
+            {(incrementalMode || fuzzyMatch) && (
+              <div className="mb-6 p-4 bg-gradient-to-r from-cyan-500/10 to-yellow-500/10 border border-cyan-500/20 rounded-xl">
                 <div className="flex items-start gap-3">
-                  <div className="mt-0.5">
-                    <Icons.Zap />
+                  <div className="mt-0.5 flex gap-2">
+                    {incrementalMode && <Icons.Layers />}
+                    {fuzzyMatch && <Icons.Zap />}
                   </div>
-                  <div className="flex-1">
-                    <h3 className="text-sm font-medium text-yellow-300 mb-1">宽松匹配已启用</h3>
-                    <p className="text-xs text-yellow-200/80 leading-relaxed">
-                      将自动忽略锚点与源文件之间的空白字符差异（Tab/空格、行尾空白等）。
-                      如遇到匹配失败，工具会显示相似内容和调试信息帮助您定位问题。
-                    </p>
+                  <div className="flex-1 text-xs text-gray-300 space-y-1">
+                    {incrementalMode && (
+                      <p><span className="text-cyan-400 font-medium">增量模式</span>：后续补丁基于前序补丁修改后的内容进行匹配，支持链式修改</p>
+                    )}
+                    {fuzzyMatch && (
+                      <p><span className="text-yellow-400 font-medium">宽松匹配</span>：自动忽略空白字符差异（Tab/空格、行尾空白等）</p>
+                    )}
                   </div>
-                  <button
-                    onClick={() => setFuzzyMatch(false)}
-                    className="text-xs text-yellow-400 hover:text-yellow-300"
-                  >
-                    关闭
-                  </button>
                 </div>
               </div>
             )}
 
             <div className="flex flex-col lg:flex-row gap-6">
+              {/* 左侧边栏 */}
               <div className="lg:w-72 xl:w-80 flex-shrink-0">
                 <div className="lg:sticky lg:top-24 space-y-4">
                   <div 
-                    className={`p-4 rounded-xl border-2 border-dashed transition-all cursor-pointer ${
-                      isDragging 
-                        ? 'border-violet-500 bg-violet-500/10' 
-                        : 'border-gray-700 hover:border-gray-600 bg-gray-800/30'
-                    }`}
+                    className="p-4 rounded-xl border-2 border-dashed border-gray-700 hover:border-gray-600 bg-gray-800/30 cursor-pointer"
                     onClick={() => document.getElementById('file-input').click()}
                   >
                     <div className="text-center py-4">
-                      <div className={`mx-auto w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${
-                        isDragging ? 'bg-violet-500/20 text-violet-400' : 'bg-gray-800 text-gray-500'
-                      }`}>
+                      <div className="mx-auto w-12 h-12 rounded-xl bg-gray-800 text-gray-500 flex items-center justify-center mb-3">
                         <Icons.Upload />
                       </div>
-                      <p className="text-sm font-medium text-gray-300">
-                        {isDragging ? '释放以上传' : '拖拽或点击上传'}
-                      </p>
+                      <p className="text-sm font-medium text-gray-300">拖拽或点击上传</p>
                       <p className="text-xs text-gray-500 mt-1">上传源文件</p>
                     </div>
-                    <input 
-                      id="file-input"
-                      type="file" 
-                      multiple 
-                      className="hidden" 
-                      onChange={handleFileUpload} 
-                    />
+                    <input id="file-input" type="file" multiple className="hidden" onChange={handleFileUpload} />
                   </div>
 
                   <div className="bg-gray-800/30 rounded-xl border border-gray-700/50 overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/50">
-                      <h3 className="text-sm font-medium text-gray-300">
-                        源文件 ({Object.keys(files).length})
-                      </h3>
+                      <h3 className="text-sm font-medium text-gray-300">源文件 ({Object.keys(files).length})</h3>
                       {Object.keys(files).length > 0 && (
-                        <button
-                          onClick={() => { setFiles({}); setPreviewFile(null); showToast('已清空所有文件', 'info'); }}
-                          className="text-xs text-gray-500 hover:text-red-400 transition-colors"
-                        >
-                          清空
-                        </button>
+                        <button onClick={() => { setFiles({}); showToast('已清空', 'info'); }} className="text-xs text-gray-500 hover:text-red-400">清空</button>
                       )}
                     </div>
-                    
                     <div className="max-h-64 lg:max-h-96 overflow-y-auto">
                       {Object.keys(files).length === 0 ? (
-                        <div className="px-4 py-8 text-center text-gray-600 text-sm">
-                          暂无文件
-                        </div>
+                        <div className="px-4 py-8 text-center text-gray-600 text-sm">暂无文件</div>
                       ) : (
                         <div className="p-2 space-y-1">
                           {Object.entries(files).map(([name, content]) => {
-                            const patchCount = patches.filter(p => 
-                              p.file === name || p.file.endsWith('/' + name)
-                            ).length;
-                            const lines = content.split('\n').length;
-                            const size = new Blob([content]).size;
-                            const sizeStr = size < 1024 ? `${size} B` : `${(size / 1024).toFixed(1)} KB`;
-                            
+                            const patchCount = patches.filter(p => p.file === name || p.file.endsWith('/' + name)).length;
                             return (
-                              <div 
-                                key={name}
-                                className="flex items-center gap-2 p-2 rounded-lg group hover:bg-gray-700/30 transition-colors"
-                              >
-                                <div className="w-7 h-7 rounded bg-gray-800 flex items-center justify-center text-gray-500 flex-shrink-0">
-                                  <Icons.FileText />
-                                </div>
+                              <div key={name} className="flex items-center gap-2 p-2 rounded-lg group hover:bg-gray-700/30">
+                                <Icons.FileText />
                                 <div className="flex-1 min-w-0">
-                                  <div className="text-xs text-gray-300 truncate font-mono" title={name}>{name}</div>
-                                  <div className="text-xs text-gray-600">{lines} 行 · {sizeStr}</div>
+                                  <div className="text-xs text-gray-300 truncate font-mono">{name}</div>
+                                  <div className="text-xs text-gray-600">{content.split('\n').length} 行</div>
                                 </div>
-                                {patchCount > 0 && (
-                                  <span className="px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400 text-xs flex-shrink-0">
-                                    {patchCount}
-                                  </span>
-                                )}
-                                <button
-                                  onClick={() => handleDeleteFile(name)}
-                                  className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-all flex-shrink-0"
-                                  title="移除文件"
-                                >
+                                {patchCount > 0 && <span className="px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400 text-xs">{patchCount}</span>}
+                                <button onClick={() => handleDeleteFile(name)} className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-gray-500 hover:text-red-400">
                                   <Icons.Trash2 />
                                 </button>
                               </div>
@@ -1159,17 +1110,12 @@ ${patch.content}`;
                     <div className="bg-purple-500/10 rounded-xl border border-purple-500/30 overflow-hidden">
                       <div className="px-4 py-3 border-b border-purple-500/20">
                         <h3 className="text-sm font-medium text-purple-300 flex items-center gap-2">
-                          <Icons.FilePlus />
-                          新建文件 ({createFiles.length})
+                          <Icons.FilePlus /> 新建文件 ({createFiles.length})
                         </h3>
                       </div>
                       <div className="p-2 space-y-1">
                         {createFiles.map(fileName => (
-                          <button
-                            key={fileName}
-                            onClick={() => handleApplyAndDownload(fileName)}
-                            className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors text-left"
-                          >
+                          <button key={fileName} onClick={() => handleApplyAndDownload(fileName)} className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-purple-500/20 text-left">
                             <Icons.Download />
                             <span className="text-xs text-purple-300 font-mono truncate">{fileName}</span>
                           </button>
@@ -1183,17 +1129,12 @@ ${patch.content}`;
                       <div className="text-xs font-medium text-gray-400 mb-2">一键应用并下载</div>
                       <div className="space-y-1">
                         {[...new Set(patches.filter(p => p.operation !== 'CREATE').map(p => p.file))].map(fileName => {
-                          const shortName = fileName.split('/').pop();
                           const hasFile = Object.keys(files).some(f => fileName === f || fileName.endsWith('/' + f));
                           if (!hasFile) return null;
                           return (
-                            <button
-                              key={fileName}
-                              onClick={() => handleApplyAndDownload(fileName)}
-                              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 text-sm font-medium transition-all text-left"
-                            >
+                            <button key={fileName} onClick={() => handleApplyAndDownload(fileName)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 text-sm font-medium text-left">
                               <Icons.Download />
-                              <span className="truncate">{shortName}</span>
+                              <span className="truncate">{fileName.split('/').pop()}</span>
                             </button>
                           );
                         })}
@@ -1203,8 +1144,9 @@ ${patch.content}`;
                 </div>
               </div>
 
+              {/* 主内容区 */}
               <div className="flex-1 min-w-0">
-                <div className="flex gap-1 p-1 bg-gray-800/50 rounded-xl mb-6 w-fit overflow-x-auto">
+                <div className="flex gap-1 p-1 bg-gray-800/50 rounded-xl mb-6 w-fit">
                   {[
                     { id: 'input', label: '输入补丁', icon: Icons.FileText },
                     { id: 'patches', label: `补丁列表 (${stats.total})`, icon: Icons.Code },
@@ -1213,221 +1155,171 @@ ${patch.content}`;
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                        activeTab === tab.id 
-                          ? 'bg-violet-500 text-white' 
-                          : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                      className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                        activeTab === tab.id ? 'bg-violet-500 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                       }`}
                     >
                       <tab.icon />
                       <span className="hidden sm:inline">{tab.label}</span>
-                      <span className="sm:hidden">{tab.id === 'patches' ? stats.total : ''}</span>
                     </button>
                   ))}
                 </div>
             
-            {activeTab === 'input' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between flex-wrap gap-4">
-                  <h2 className="text-lg font-medium">输入 FIUP v3.0 补丁</h2>
-                  <button
-                    onClick={handleParse}
-                    disabled={!patchText.trim()}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-500 hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-                  >
-                    <Icons.Play />
-                    解析补丁
-                  </button>
-                </div>
-                
-                <textarea
-                  value={patchText}
-                  onChange={(e) => setPatchText(e.target.value)}
-                  placeholder={`粘贴 FIUP v3.0 补丁内容...
-
-格式示例（使用 \`\`\`fiup 代码块包裹以保留缩进）:
-
-\`\`\`fiup
-<<<FIUP>>>
-[FILE]: src/example.py
-[OP]: REPLACE
-[ANCHOR]
-def old_function():
-    print("hello")
-    return None
-[CONTENT]
-def new_function(name: str):
-    """Greet someone."""
-    print(f"Hello, {name}!")
-    return {"greeted": name}
-<<<END>>>
-\`\`\`
-
-💡 v3.2 新功能:
-- 启用"宽松匹配"自动处理空白字符差异
-- 显示相似内容和调试信息
-- 空白字符可视化`}
-                  className="w-full h-80 sm:h-96 bg-gray-900/50 border border-gray-700/50 rounded-xl p-4 font-mono text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 resize-none"
-                />
-                
-                <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
-                  <span>✓ 从 AI 对话粘贴</span>
-                  <span>✓ 自动识别 ```fiup 代码块</span>
-                  <span>✓ 宽松匹配空白字符</span>
-                </div>
-              </div>
-            )}
-            
-            {activeTab === 'patches' && (
-              <div className="space-y-4">
-                {stats.total > 0 && (
-                  <div className="flex items-center gap-4 p-4 bg-gray-800/30 rounded-xl flex-wrap">
-                    <div className="flex items-center gap-4 sm:gap-6 flex-1 flex-wrap">
-                      {Object.entries(stats.byOp).map(([op, count]) => count > 0 && (
-                        <div key={op} className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${opColors[op]?.text.replace('text-', 'bg-') || 'bg-gray-500'}`} />
-                          <span className="text-sm text-gray-400">{op}</span>
-                          <span className="text-sm font-medium">{count}</span>
-                        </div>
-                      ))}
+                {activeTab === 'input' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+                      <h2 className="text-lg font-medium">输入 FIUP v3.0 补丁</h2>
+                      <button
+                        onClick={handleParse}
+                        disabled={!patchText.trim()}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-500 hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                      >
+                        <Icons.Play /> 解析补丁
+                      </button>
                     </div>
-                    <button
-                      onClick={handleCopyPatches}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm transition-colors"
-                    >
-                      <Icons.Copy />
-                      复制全部
-                    </button>
+                    
+                    <textarea
+                      value={patchText}
+                      onChange={(e) => setPatchText(e.target.value)}
+                      placeholder={`粘贴 FIUP v3.0 补丁内容...
+
+v3.3 新功能:
+🔗 增量补丁模式 - 后续补丁可基于前序补丁修改后的内容匹配
+🎯 多目标定位 - 当锚点匹配多处时，可选择应用位置
+⚡ 宽松匹配 - 自动处理空白字符差异`}
+                      className="w-full h-80 sm:h-96 bg-gray-900/50 border border-gray-700/50 rounded-xl p-4 font-mono text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-violet-500/50 resize-none"
+                    />
                   </div>
                 )}
-
-                <div className="flex items-center gap-2 p-3 bg-violet-500/10 border border-violet-500/30 rounded-lg text-sm text-violet-300">
-                  <Icons.Info />
-                  <span>展开补丁卡片查看详细信息和调试工具，点击编辑按钮可修改内容</span>
-                </div>
-                
-                <div className="space-y-3">
-                  {patches.length === 0 ? (
-                    <div className="text-center py-16 text-gray-500">
-                      <div className="mx-auto mb-4 opacity-30"><Icons.Code size={48} /></div>
-                      <p>暂无补丁</p>
-                      <p className="text-sm mt-1">在"输入补丁"标签页粘贴 FIUP v3.0 内容</p>
-                    </div>
-                  ) : (
-                    patches.map((patch, index) => (
-                      <PatchCard
-                        key={patch.id}
-                        patch={patch}
-                        index={index}
-                        expanded={expandedPatch === patch.id}
-                        onToggle={() => setExpandedPatch(expandedPatch === patch.id ? null : patch.id)}
-                        onDelete={() => handleDeletePatch(patch.id)}
-                        onUpdate={handleUpdatePatch}
-                        fileContent={files[patch.file] || files[patch.file.split('/').pop()]}
-                        fuzzyMatch={fuzzyMatch}
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
             
-            {activeTab === 'preview' && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-4 flex-wrap">
-                  <h2 className="text-lg font-medium">选择文件预览</h2>
-                  {previewFile && (
-                    <button
-                      onClick={handleExport}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 text-sm transition-colors ml-auto"
-                    >
-                      <Icons.Download />
-                      导出文件
-                    </button>
-                  )}
-                </div>
-                
-                <div className="flex flex-wrap gap-2">
-                  {Object.keys(files).length === 0 && createFiles.length === 0 ? (
-                    <div className="w-full text-center py-8 border-2 border-dashed border-gray-700 rounded-xl">
-                      <p className="text-gray-400">请先在左侧上传源文件</p>
-                      <p className="text-gray-600 text-sm mt-1">或解析包含 CREATE 操作的补丁</p>
-                    </div>
-                  ) : (
-                    <>
-                      {Object.keys(files).map(name => {
-                        const patchCount = patches.filter(p => 
-                          p.file === name || p.file.endsWith('/' + name)
-                        ).length;
-                        return (
-                          <button
-                            key={name}
-                            onClick={() => handlePreview(name)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
-                              previewFile?.name === name
-                                ? 'bg-violet-500/20 border-violet-500/50 text-violet-300'
-                                : 'bg-gray-800/50 border-gray-700/50 hover:border-gray-600'
-                            }`}
-                          >
-                            <Icons.FileText />
-                            <span className="text-sm">{name}</span>
-                            {patchCount > 0 && (
-                              <span className="px-1.5 py-0.5 rounded bg-violet-500/30 text-xs">
-                                {patchCount}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                      {patches.filter(p => p.operation === 'CREATE').map(patch => (
-                        <button
-                          key={patch.file}
-                          onClick={() => handlePreviewCreate(patch)}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
-                            previewFile?.name === patch.file
-                              ? 'bg-purple-500/20 border-purple-500/50 text-purple-300'
-                              : 'bg-purple-500/10 border-purple-500/30 hover:border-purple-500/50 text-purple-400'
-                          }`}
-                        >
-                          <Icons.FilePlus />
-                          <span className="text-sm">{patch.file}</span>
-                          <span className="px-1.5 py-0.5 rounded bg-purple-500/30 text-xs">NEW</span>
+                {activeTab === 'patches' && (
+                  <div className="space-y-4">
+                    {stats.total > 0 && (
+                      <div className="flex items-center gap-4 p-4 bg-gray-800/30 rounded-xl flex-wrap">
+                        <div className="flex items-center gap-4 sm:gap-6 flex-1 flex-wrap">
+                          {Object.entries(stats.byOp).map(([op, count]) => count > 0 && (
+                            <div key={op} className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${opColors[op]?.text.replace('text-', 'bg-')}`} />
+                              <span className="text-sm text-gray-400">{op}</span>
+                              <span className="text-sm font-medium">{count}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <button onClick={handleCopyPatches} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm">
+                          <Icons.Copy /> 复制全部
                         </button>
-                      ))}
-                    </>
-                  )}
-                </div>
-                
-                {previewFile && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-medium text-gray-400">
-                        {previewFile.isCreate ? '新文件预览' : '变更预览'}: {previewFile.name}
-                      </h3>
-                      {!previewFile.isCreate && (
-                        <button
-                          onClick={() => handlePreview(previewFile.name)}
-                          className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-gray-400 hover:text-white transition-colors"
-                        >
-                          <Icons.RefreshCw />
-                          刷新
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2 p-3 bg-violet-500/10 border border-violet-500/30 rounded-lg text-sm text-violet-300">
+                      <Icons.Info />
+                      <span>展开补丁查看详情，多目标匹配时可选择应用位置</span>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {patches.length === 0 ? (
+                        <div className="text-center py-16 text-gray-500">
+                          <div className="mx-auto mb-4 opacity-30"><Icons.Code size={48} /></div>
+                          <p>暂无补丁</p>
+                        </div>
+                      ) : (
+                        patches.map((patch, index) => (
+                          <PatchCard
+                            key={patch.id}
+                            patch={patch}
+                            index={index}
+                            expanded={expandedPatch === patch.id}
+                            onToggle={() => setExpandedPatch(expandedPatch === patch.id ? null : patch.id)}
+                            onDelete={() => handleDeletePatch(patch.id)}
+                            onUpdate={handleUpdatePatch}
+                            fileContent={files[patch.file] || files[patch.file.split('/').pop()]}
+                            accumulatedContent={incrementalMode ? accumulatedContents[patch.id] : null}
+                            fuzzyMatch={fuzzyMatch}
+                            isIncremental={incrementalMode}
+                          />
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+            
+                {activeTab === 'preview' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <h2 className="text-lg font-medium">选择文件预览</h2>
+                      {previewFile && (
+                        <button onClick={handleExport} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 text-sm ml-auto">
+                          <Icons.Download /> 导出文件
                         </button>
                       )}
                     </div>
-                    <DiffView original={previewFile.original} modified={previewFile.modified} />
+                    
+                    <div className="flex flex-wrap gap-2">
+                      {Object.keys(files).length === 0 && createFiles.length === 0 ? (
+                        <div className="w-full text-center py-8 border-2 border-dashed border-gray-700 rounded-xl">
+                          <p className="text-gray-400">请先上传源文件</p>
+                        </div>
+                      ) : (
+                        <>
+                          {Object.keys(files).map(name => {
+                            const patchCount = patches.filter(p => p.file === name || p.file.endsWith('/' + name)).length;
+                            return (
+                              <button
+                                key={name}
+                                onClick={() => handlePreview(name)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+                                  previewFile?.name === name ? 'bg-violet-500/20 border-violet-500/50 text-violet-300' : 'bg-gray-800/50 border-gray-700/50 hover:border-gray-600'
+                                }`}
+                              >
+                                <Icons.FileText />
+                                <span className="text-sm">{name}</span>
+                                {patchCount > 0 && <span className="px-1.5 py-0.5 rounded bg-violet-500/30 text-xs">{patchCount}</span>}
+                              </button>
+                            );
+                          })}
+                          {patches.filter(p => p.operation === 'CREATE').map(patch => (
+                            <button
+                              key={patch.file}
+                              onClick={() => handlePreviewCreate(patch)}
+                              className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${
+                                previewFile?.name === patch.file ? 'bg-purple-500/20 border-purple-500/50 text-purple-300' : 'bg-purple-500/10 border-purple-500/30 text-purple-400'
+                              }`}
+                            >
+                              <Icons.FilePlus />
+                              <span className="text-sm">{patch.file}</span>
+                              <span className="px-1.5 py-0.5 rounded bg-purple-500/30 text-xs">NEW</span>
+                            </button>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                    
+                    {previewFile && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-medium text-gray-400">
+                            {previewFile.isCreate ? '新文件预览' : '变更预览'}: {previewFile.name}
+                          </h3>
+                          {!previewFile.isCreate && (
+                            <button onClick={() => handlePreview(previewFile.name)} className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-gray-400 hover:text-white">
+                              <Icons.RefreshCw /> 刷新
+                            </button>
+                          )}
+                        </div>
+                        <DiffView original={previewFile.original} modified={previewFile.modified} />
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
               </div>
             </div>
           </main>
           
           <footer className="border-t border-gray-800/50 mt-auto">
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between text-sm text-gray-500 flex-wrap gap-2">
-              <span>FIUP Tool v3.2</span>
-              <span className="hidden sm:inline">宽松匹配 · 调试工具 · 空白可视化</span>
-              <a href="https://github.com/Thankyou-Cheems" target="_blank" className="hover:text-gray-300 transition-colors">猹Cheems</a>
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between text-sm text-gray-500">
+              <span>FIUP Tool v3.3</span>
+              <span className="hidden sm:inline">增量补丁 · 多目标定位 · 宽松匹配</span>
+              <a href="https://github.com/Thankyou-Cheems" target="_blank" className="hover:text-gray-300">猹Cheems</a>
             </div>
           </footer>
 
