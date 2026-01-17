@@ -3,11 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FIUP Tool v3.3 - 增量补丁 + 多目标定位</title>
+  <title>FIUP Tool v3.5 - 增强版</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- Prism.js for syntax highlighting -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-jsx.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-tsx.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markdown.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-go.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -37,21 +58,70 @@
     ::-webkit-scrollbar-thumb { background: #3a3a4a; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #5a5a6a; }
     textarea.edit-area { tab-size: 2; }
-    .whitespace-visible { white-space: pre; }
-    .whitespace-visible .space::before { content: '·'; color: #3a3a4a; }
-    .whitespace-visible .tab::before { content: '→'; color: #5a5a6a; }
+    .drag-over { background: rgba(139, 92, 246, 0.2) !important; border-color: rgba(139, 92, 246, 0.5) !important; }
+    .dragging { opacity: 0.5; }
+    .drag-handle { cursor: grab; }
+    .drag-handle:active { cursor: grabbing; }
+    .dep-line { stroke: #6366f1; stroke-width: 2; fill: none; }
+    .dep-arrow { fill: #6366f1; }
+    /* Prism overrides for dark theme */
+    pre[class*="language-"], code[class*="language-"] {
+      background: transparent !important;
+      text-shadow: none !important;
+      font-size: 0.875rem !important;
+    }
+    .token.comment { color: #6a737d !important; }
+    .token.keyword { color: #ff79c6 !important; }
+    .token.string { color: #a5d6ff !important; }
+    .token.function { color: #d2a8ff !important; }
+    .token.number { color: #79c0ff !important; }
+    .token.operator { color: #ff7b72 !important; }
+    .token.class-name { color: #ffa657 !important; }
+    /* Inline diff highlights */
+    .diff-char-add { background: rgba(46, 160, 67, 0.4); border-radius: 2px; }
+    .diff-char-del { background: rgba(248, 81, 73, 0.4); border-radius: 2px; text-decoration: line-through; }
+    .diff-word-add { background: rgba(46, 160, 67, 0.3); padding: 1px 2px; border-radius: 3px; }
+    .diff-word-del { background: rgba(248, 81, 73, 0.3); padding: 1px 2px; border-radius: 3px; text-decoration: line-through; }
+    /* Shortcut hints */
+    .kbd { 
+      display: inline-block;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-family: monospace;
+      background: #2a2a38;
+      border: 1px solid #3a3a4a;
+      border-radius: 4px;
+      box-shadow: 0 1px 0 #3a3a4a;
+    }
+    /* Template dropdown */
+    .template-dropdown {
+      animation: slideDown 0.15s ease-out;
+    }
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    /* Suggestion highlight */
+    .suggestion-match { color: #ffa657; font-weight: 600; }
+    /* Active patch highlight */
+    .patch-active { box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.5); }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useCallback, useMemo } = React;
+    const { useState, useCallback, useMemo, useEffect, useRef } = React;
 
+    // ============================================================================
+    // Icons
+    // ============================================================================
     const Icons = {
       Upload: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
       FileText: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>,
       FilePlus: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>,
+      Folder: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
+      Archive: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>,
       Play: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>,
       Eye: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
       EyeOff: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>,
@@ -74,9 +144,308 @@
       Layers: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>,
       Target: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
       MapPin: () => <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
+      GripVertical: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>,
+      Undo: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>,
+      Redo: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>,
+      GitBranch: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>,
+      Network: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><line x1="12" y1="12" x2="12" y2="8"/></svg>,
+      ArrowUp: () => <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>,
+      ArrowDown: () => <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>,
+      Template: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>,
+      Keyboard: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="M6 8h.001"/><path d="M10 8h.001"/><path d="M14 8h.001"/><path d="M18 8h.001"/><path d="M8 12h.001"/><path d="M12 12h.001"/><path d="M16 12h.001"/><path d="M7 16h10"/></svg>,
+      Wand: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8 19 13"/><path d="M15 9h0"/><path d="M17.8 6.2 19 5"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg>,
+      Search: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+      Plus: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
     };
 
-    // FIUP v3.0 解析器
+    // ============================================================================
+    // Syntax Highlighting Utilities
+    // ============================================================================
+    const getLanguageFromFileName = (fileName) => {
+      if (!fileName) return 'text';
+      const ext = fileName.split('.').pop()?.toLowerCase();
+      const langMap = {
+        'js': 'javascript', 'jsx': 'jsx', 'ts': 'typescript', 'tsx': 'tsx',
+        'py': 'python', 'rb': 'ruby', 'java': 'java', 'kt': 'kotlin',
+        'c': 'c', 'cpp': 'cpp', 'cc': 'cpp', 'h': 'c', 'hpp': 'cpp',
+        'cs': 'csharp', 'go': 'go', 'rs': 'rust', 'swift': 'swift',
+        'css': 'css', 'scss': 'scss', 'less': 'less', 'html': 'html',
+        'xml': 'xml', 'json': 'json', 'yaml': 'yaml', 'yml': 'yaml',
+        'md': 'markdown', 'sql': 'sql', 'sh': 'bash', 'bash': 'bash',
+        'zsh': 'bash', 'fish': 'bash', 'ps1': 'powershell',
+        'php': 'php', 'vue': 'vue', 'svelte': 'svelte',
+      };
+      return langMap[ext] || 'text';
+    };
+
+    const highlightCode = (code, language) => {
+      if (!code) return '';
+      try {
+        if (Prism.languages[language]) {
+          return Prism.highlight(code, Prism.languages[language], language);
+        }
+      } catch (e) {}
+      return code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    };
+
+    // Syntax highlighted code block component
+    const SyntaxHighlightedCode = ({ code, language, className = '' }) => {
+      const highlighted = useMemo(() => highlightCode(code, language), [code, language]);
+      return (
+        <pre className={`bg-black/30 rounded-lg p-3 text-sm overflow-x-auto font-mono whitespace-pre ${className}`}>
+          <code dangerouslySetInnerHTML={{ __html: highlighted }} />
+        </pre>
+      );
+    };
+
+    // ============================================================================
+    // Inline Diff Algorithm (Character/Word Level)
+    // ============================================================================
+    const computeInlineDiff = (oldStr, newStr) => {
+      // Simple word-level diff
+      const oldWords = oldStr.split(/(\s+)/);
+      const newWords = newStr.split(/(\s+)/);
+      
+      const result = { oldParts: [], newParts: [] };
+      
+      // LCS-based diff for words
+      const lcs = [];
+      for (let i = 0; i <= oldWords.length; i++) {
+        lcs[i] = [];
+        for (let j = 0; j <= newWords.length; j++) {
+          if (i === 0 || j === 0) lcs[i][j] = 0;
+          else if (oldWords[i-1] === newWords[j-1]) lcs[i][j] = lcs[i-1][j-1] + 1;
+          else lcs[i][j] = Math.max(lcs[i-1][j], lcs[i][j-1]);
+        }
+      }
+      
+      // Backtrack
+      let i = oldWords.length, j = newWords.length;
+      const oldResult = [], newResult = [];
+      
+      while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && oldWords[i-1] === newWords[j-1]) {
+          oldResult.unshift({ text: oldWords[i-1], type: 'same' });
+          newResult.unshift({ text: newWords[j-1], type: 'same' });
+          i--; j--;
+        } else if (j > 0 && (i === 0 || lcs[i][j-1] >= lcs[i-1][j])) {
+          newResult.unshift({ text: newWords[j-1], type: 'add' });
+          j--;
+        } else if (i > 0) {
+          oldResult.unshift({ text: oldWords[i-1], type: 'del' });
+          i--;
+        }
+      }
+      
+      return { oldParts: oldResult, newParts: newResult };
+    };
+
+    // Render inline diff HTML
+    const renderInlineDiff = (parts, type) => {
+      return parts.map((part, idx) => {
+        if (part.type === 'same') return part.text;
+        const cls = part.type === 'add' ? 'diff-word-add' : 'diff-word-del';
+        return `<span class="${cls}">${part.text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</span>`;
+      }).join('');
+    };
+
+    // ============================================================================
+    // Smart Anchor Suggestion (Similarity Algorithm)
+    // ============================================================================
+    const levenshteinDistance = (a, b) => {
+      const matrix = [];
+      for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+      for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+      for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+          if (b[i-1] === a[j-1]) matrix[i][j] = matrix[i-1][j-1];
+          else matrix[i][j] = Math.min(matrix[i-1][j-1] + 1, matrix[i][j-1] + 1, matrix[i-1][j] + 1);
+        }
+      }
+      return matrix[b.length][a.length];
+    };
+
+    const similarity = (a, b) => {
+      if (!a || !b) return 0;
+      const maxLen = Math.max(a.length, b.length);
+      if (maxLen === 0) return 1;
+      return (maxLen - levenshteinDistance(a, b)) / maxLen;
+    };
+
+    const findSmartSuggestions = (content, anchor, maxResults = 5) => {
+      if (!content || !anchor) return [];
+      
+      const anchorLines = anchor.split('\n');
+      const anchorFirstLine = anchorLines[0]?.trim() || '';
+      const anchorNormalized = anchor.replace(/\s+/g, ' ').trim();
+      const contentLines = content.split('\n');
+      
+      const candidates = [];
+      
+      // Sliding window approach
+      for (let i = 0; i < contentLines.length; i++) {
+        const windowSize = anchorLines.length;
+        const windowEnd = Math.min(i + windowSize, contentLines.length);
+        const windowContent = contentLines.slice(i, windowEnd).join('\n');
+        const windowNormalized = windowContent.replace(/\s+/g, ' ').trim();
+        
+        // Calculate similarity score
+        const sim = similarity(anchorNormalized, windowNormalized);
+        
+        // Also check first line similarity
+        const firstLineSim = similarity(anchorFirstLine, contentLines[i]?.trim() || '');
+        
+        // Combined score
+        const score = sim * 0.7 + firstLineSim * 0.3;
+        
+        if (score > 0.3) {
+          candidates.push({
+            line: i + 1,
+            preview: windowContent,
+            score,
+            similarity: Math.round(sim * 100),
+            matchedParts: findMatchedParts(anchorFirstLine, contentLines[i] || '')
+          });
+        }
+      }
+      
+      // Sort by score and dedupe
+      return candidates
+        .sort((a, b) => b.score - a.score)
+        .filter((c, idx, arr) => idx === 0 || Math.abs(c.line - arr[idx-1].line) > anchorLines.length)
+        .slice(0, maxResults);
+    };
+
+    const findMatchedParts = (anchor, content) => {
+      // Find common substrings for highlighting
+      const words = anchor.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+      const matches = [];
+      words.forEach(word => {
+        const idx = content.toLowerCase().indexOf(word);
+        if (idx !== -1) matches.push({ start: idx, end: idx + word.length });
+      });
+      return matches;
+    };
+
+    // ============================================================================
+    // Patch Templates
+    // ============================================================================
+    const PATCH_TEMPLATES = [
+      {
+        id: 'add-import-python',
+        name: '添加 Python Import',
+        icon: '🐍',
+        operation: 'INSERT_BEFORE',
+        description: '在文件开头添加 import 语句',
+        template: {
+          anchor: 'import ',
+          content: 'import new_module\n'
+        }
+      },
+      {
+        id: 'add-import-js',
+        name: '添加 JS/TS Import',
+        icon: '📦',
+        operation: 'INSERT_BEFORE',
+        description: '在文件开头添加 import 语句',
+        template: {
+          anchor: "import ",
+          content: "import { something } from 'module';\n"
+        }
+      },
+      {
+        id: 'add-method',
+        name: '添加类方法',
+        icon: '🔧',
+        operation: 'INSERT_AFTER',
+        description: '在现有方法后添加新方法',
+        template: {
+          anchor: '    def existing_method(self):\n        pass',
+          content: '\n    def new_method(self):\n        """New method description."""\n        pass'
+        }
+      },
+      {
+        id: 'add-function',
+        name: '添加函数',
+        icon: '⚡',
+        operation: 'INSERT_AFTER',
+        description: '在现有函数后添加新函数',
+        template: {
+          anchor: 'def existing_function():\n    pass',
+          content: '\n\ndef new_function():\n    """New function description."""\n    pass'
+        }
+      },
+      {
+        id: 'replace-function',
+        name: '替换函数实现',
+        icon: '🔄',
+        operation: 'REPLACE',
+        description: '替换整个函数实现',
+        template: {
+          anchor: 'def old_function():\n    # old implementation\n    pass',
+          content: 'def old_function():\n    # new implementation\n    return True'
+        }
+      },
+      {
+        id: 'add-decorator',
+        name: '添加装饰器',
+        icon: '🎀',
+        operation: 'INSERT_BEFORE',
+        description: '在函数/方法前添加装饰器',
+        template: {
+          anchor: 'def some_function',
+          content: '@decorator\n'
+        }
+      },
+      {
+        id: 'add-comment',
+        name: '添加注释块',
+        icon: '💬',
+        operation: 'INSERT_BEFORE',
+        description: '在代码前添加注释',
+        template: {
+          anchor: 'code_line',
+          content: '# TODO: Description\n# Additional notes\n'
+        }
+      },
+      {
+        id: 'delete-function',
+        name: '删除函数',
+        icon: '🗑️',
+        operation: 'DELETE',
+        description: '删除整个函数',
+        template: {
+          anchor: 'def deprecated_function():\n    pass',
+          content: ''
+        }
+      },
+      {
+        id: 'create-file',
+        name: '创建新文件',
+        icon: '📄',
+        operation: 'CREATE',
+        description: '创建一个新的代码文件',
+        template: {
+          anchor: '',
+          content: '"""Module description."""\n\n\nclass NewClass:\n    """Class description."""\n    \n    def __init__(self):\n        pass'
+        }
+      },
+      {
+        id: 'add-config',
+        name: '添加配置项',
+        icon: '⚙️',
+        operation: 'INSERT_AFTER',
+        description: '在配置文件中添加新配置',
+        template: {
+          anchor: '# Configuration',
+          content: '\nNEW_CONFIG = "value"'
+        }
+      }
+    ];
+
+    // ============================================================================
+    // FIUP Parser
+    // ============================================================================
     const parseFIUP = (text) => {
       let content = text;
       const codeBlockPattern = /```(?:fiup)?\s*\n([\s\S]*?)```/g;
@@ -116,7 +485,7 @@
           anchor,
           content: contentText,
           raw: block,
-          selectedMatchIndex: null // 用于多目标匹配时选择
+          selectedMatchIndex: null
         });
       }
       
@@ -125,45 +494,22 @@
 
     const generateRaw = (patch) => {
       if (patch.operation === 'CREATE') {
-        return `<<<FIUP>>>
-[FILE]: ${patch.file}
-[OP]: ${patch.operation}
-[CONTENT]
-${patch.content}
-<<<END>>>`;
+        return `<<<FIUP>>>\n[FILE]: ${patch.file}\n[OP]: ${patch.operation}\n[CONTENT]\n${patch.content}\n<<<END>>>`;
       }
-      
-      let raw = `<<<FIUP>>>
-[FILE]: ${patch.file}
-[OP]: ${patch.operation}
-[ANCHOR]
-${patch.anchor}`;
-      
+      let raw = `<<<FIUP>>>\n[FILE]: ${patch.file}\n[OP]: ${patch.operation}\n[ANCHOR]\n${patch.anchor}`;
       if (patch.operation !== 'DELETE') {
-        raw += `
-[CONTENT]
-${patch.content}`;
+        raw += `\n[CONTENT]\n${patch.content}`;
       }
-      
-      raw += `
-<<<END>>>`;
-      
-      return raw;
+      return raw + `\n<<<END>>>`;
     };
 
     // ============================================================================
-    // 改进的匹配函数 - 支持多目标定位
+    // Matching Functions
     // ============================================================================
-    
     const normalizeWhitespace = (text) => {
-      return text
-        .split('\n')
-        .map(line => line.trimEnd())
-        .join('\n')
-        .replace(/[ \t]+/g, ' ');
+      return text.split('\n').map(line => line.trimEnd()).join('\n').replace(/[ \t]+/g, ' ');
     };
 
-    // 查找所有匹配位置
     const findAllMatches = (content, anchor, fuzzyMatch = false) => {
       const normalizedContent = content.replace(/\r\n/g, '\n');
       const normalizedAnchor = anchor.replace(/\r\n/g, '\n');
@@ -180,31 +526,20 @@ ${patch.content}`;
       let pos = 0;
       
       while ((pos = searchContent.indexOf(searchAnchor, pos)) !== -1) {
-        // 计算行号
         const beforeText = normalizedContent.substring(0, pos);
         const line = beforeText.split('\n').length;
-        
-        // 获取上下文预览
         const contentLines = normalizedContent.split('\n');
         const startLine = Math.max(0, line - 2);
         const endLine = Math.min(contentLines.length, line + normalizedAnchor.split('\n').length + 1);
         const preview = contentLines.slice(startLine, endLine).join('\n');
         
-        matches.push({
-          position: pos,
-          line,
-          preview,
-          startLine: startLine + 1,
-          endLine
-        });
-        
-        pos += 1; // 继续搜索下一个匹配
+        matches.push({ position: pos, line, preview, startLine: startLine + 1, endLine });
+        pos += 1;
       }
       
       return matches;
     };
 
-    // 查找相似内容（首行匹配）
     const findSimilarContent = (content, anchor, maxResults = 5) => {
       const anchorLines = anchor.split('\n').filter(l => l.trim());
       if (anchorLines.length === 0) return [];
@@ -215,48 +550,32 @@ ${patch.content}`;
       
       for (let i = 0; i < contentLines.length; i++) {
         if (contentLines[i].trim() === firstLine) {
-          matches.push({
-            line: i + 1,
-            preview: contentLines.slice(i, i + anchorLines.length).join('\n')
-          });
+          matches.push({ line: i + 1, preview: contentLines.slice(i, i + anchorLines.length).join('\n') });
         }
       }
       
       return matches.slice(0, maxResults);
     };
 
-    // 应用补丁（支持指定匹配索引）
     const simulateApply = (content, patch, fuzzyMatch = false, matchIndex = null) => {
       if (patch.operation === 'CREATE') {
-        return { 
-          success: true, 
-          message: '新建文件', 
-          result: patch.content,
-          isCreate: true
-        };
+        return { success: true, message: '新建文件', result: patch.content, isCreate: true };
       }
       
       const normalizedContent = content.replace(/\r\n/g, '\n');
       const normalizedAnchor = patch.anchor.replace(/\r\n/g, '\n');
       
-      let searchContent = normalizedContent;
-      let searchAnchor = normalizedAnchor;
-      
-      if (fuzzyMatch) {
-        searchContent = normalizeWhitespace(normalizedContent);
-        searchAnchor = normalizeWhitespace(normalizedAnchor);
-      }
-      
-      // 查找所有匹配
       const allMatches = findAllMatches(normalizedContent, normalizedAnchor, fuzzyMatch);
       
       if (allMatches.length === 0) {
         const similar = findSimilarContent(normalizedContent, normalizedAnchor);
+        const smartSuggestions = findSmartSuggestions(normalizedContent, normalizedAnchor);
         return { 
           success: false, 
           message: '锚点未找到', 
           result: content,
           similar: similar.length > 0 ? similar : null,
+          smartSuggestions: smartSuggestions.length > 0 ? smartSuggestions : null,
           debugInfo: {
             anchorLength: normalizedAnchor.length,
             hasTab: normalizedAnchor.includes('\t'),
@@ -266,13 +585,8 @@ ${patch.content}`;
         };
       }
       
-      // 多处匹配
       if (allMatches.length > 1) {
-        // 如果指定了匹配索引，使用该位置
-        if (matchIndex !== null && matchIndex >= 0 && matchIndex < allMatches.length) {
-          // 使用指定的匹配位置继续
-        } else {
-          // 返回所有匹配位置供用户选择
+        if (matchIndex === null || matchIndex < 0 || matchIndex >= allMatches.length) {
           return { 
             success: false, 
             message: `锚点匹配到 ${allMatches.length} 处`, 
@@ -283,7 +597,6 @@ ${patch.content}`;
         }
       }
       
-      // 确定要使用的匹配位置
       const targetMatch = matchIndex !== null ? allMatches[matchIndex] : allMatches[0];
       const pos = targetMatch.position;
       
@@ -331,20 +644,13 @@ ${patch.content}`;
         if (!patch.content?.trim()) errors.push('CREATE 操作但内容为空');
       } else {
         if (!patch.anchor?.trim()) errors.push('锚点内容为空');
-        
         const anchorLines = patch.anchor?.trim().split('\n').length || 0;
-        if (anchorLines < 2) warnings.push(`锚点仅 ${anchorLines} 行，建议 3-6 行`);
-        
+        if (anchorLines < 2) warnings.push(`锚点仅 ${anchorLines} 行`);
         if (patch.operation !== 'DELETE' && !patch.content?.trim()) {
           errors.push('非 DELETE/CREATE 操作但内容为空');
         }
-        
-        if (patch.anchor?.includes('\t')) warnings.push('锚点包含Tab字符');
+        if (patch.anchor?.includes('\t')) warnings.push('锚点包含Tab');
         if (/[ \t]$/.test(patch.anchor)) warnings.push('锚点包含行尾空白');
-      }
-      
-      if (patch.anchor?.includes('...') || patch.anchor?.includes('# ...')) {
-        warnings.push('锚点中包含 "..."');
       }
       
       return { valid: errors.length === 0, errors, warnings };
@@ -360,17 +666,471 @@ ${patch.content}`;
 
     const operations = ['REPLACE', 'INSERT_AFTER', 'INSERT_BEFORE', 'DELETE', 'CREATE'];
 
-    const visualizeWhitespace = (text) => {
-      if (!text) return null;
-      return text.split('').map((char, idx) => {
-        if (char === ' ') return <span key={idx} className="space">·</span>;
-        if (char === '\t') return <span key={idx} className="tab">→   </span>;
-        return char;
-      });
+    // ============================================================================
+    // History Hook (Undo/Redo)
+    // ============================================================================
+    const useHistory = (initialState, maxHistory = 50) => {
+      const [history, setHistory] = useState([initialState]);
+      const [currentIndex, setCurrentIndex] = useState(0);
+      
+      const current = history[currentIndex];
+      
+      const push = useCallback((newState) => {
+        setHistory(prev => {
+          const newHistory = prev.slice(0, currentIndex + 1);
+          newHistory.push(newState);
+          if (newHistory.length > maxHistory) newHistory.shift();
+          return newHistory;
+        });
+        setCurrentIndex(prev => Math.min(prev + 1, maxHistory - 1));
+      }, [currentIndex, maxHistory]);
+      
+      const undo = useCallback(() => {
+        if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
+      }, [currentIndex]);
+      
+      const redo = useCallback(() => {
+        if (currentIndex < history.length - 1) setCurrentIndex(prev => prev + 1);
+      }, [currentIndex, history.length]);
+      
+      const canUndo = currentIndex > 0;
+      const canRedo = currentIndex < history.length - 1;
+      
+      return { current, push, undo, redo, canUndo, canRedo };
     };
 
     // ============================================================================
-    // PatchCard 组件 - 支持增量内容和多目标选择
+    // Dependency Analysis
+    // ============================================================================
+    const analyzeDependencies = (patches, files, fuzzyMatch) => {
+      const deps = [];
+      
+      const fileGroups = {};
+      patches.forEach((patch, index) => {
+        const file = patch.file;
+        if (!fileGroups[file]) fileGroups[file] = [];
+        fileGroups[file].push({ patch, index });
+      });
+      
+      Object.values(fileGroups).forEach(group => {
+        for (let i = 1; i < group.length; i++) {
+          const prev = group[i - 1];
+          const curr = group[i];
+          
+          deps.push({ from: prev.index, to: curr.index, type: 'order' });
+          
+          if (curr.patch.anchor && prev.patch.content) {
+            if (prev.patch.content.includes(curr.patch.anchor.split('\n')[0]?.trim())) {
+              deps.push({ from: prev.index, to: curr.index, type: 'content' });
+            }
+          }
+        }
+      });
+      
+      return deps;
+    };
+
+    // ============================================================================
+    // Keyboard Shortcuts Hook
+    // ============================================================================
+    const useKeyboardShortcuts = (handlers) => {
+      useEffect(() => {
+        const handleKeyDown = (e) => {
+          const isMod = e.ctrlKey || e.metaKey;
+          
+          // Ctrl+Z / Cmd+Z - Undo
+          if (isMod && e.key === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            handlers.undo?.();
+          }
+          // Ctrl+Shift+Z / Cmd+Shift+Z - Redo
+          if (isMod && e.key === 'z' && e.shiftKey) {
+            e.preventDefault();
+            handlers.redo?.();
+          }
+          // Ctrl+Y / Cmd+Y - Redo (alternative)
+          if (isMod && e.key === 'y') {
+            e.preventDefault();
+            handlers.redo?.();
+          }
+          // Ctrl+S / Cmd+S - Save/Apply
+          if (isMod && e.key === 's') {
+            e.preventDefault();
+            handlers.save?.();
+          }
+          // Ctrl+Enter - Parse
+          if (isMod && e.key === 'Enter') {
+            e.preventDefault();
+            handlers.parse?.();
+          }
+          // Arrow Up/Down for patch navigation (when not in input)
+          if (e.key === 'ArrowUp' && e.altKey) {
+            e.preventDefault();
+            handlers.prevPatch?.();
+          }
+          if (e.key === 'ArrowDown' && e.altKey) {
+            e.preventDefault();
+            handlers.nextPatch?.();
+          }
+          // Escape - close/cancel
+          if (e.key === 'Escape') {
+            handlers.escape?.();
+          }
+          // Ctrl+N - New patch from template
+          if (isMod && e.key === 'n') {
+            e.preventDefault();
+            handlers.newPatch?.();
+          }
+          // ? - Show shortcuts help
+          if (e.key === '?' && e.shiftKey) {
+            e.preventDefault();
+            handlers.showHelp?.();
+          }
+        };
+        
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+      }, [handlers]);
+    };
+
+    // ============================================================================
+    // Shortcuts Help Modal
+    // ============================================================================
+    const ShortcutsModal = ({ onClose }) => (
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="bg-gray-800 rounded-2xl border border-gray-700 max-w-lg w-full p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <Icons.Keyboard />
+              键盘快捷键
+            </h2>
+            <button onClick={onClose} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400">
+              <Icons.X />
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { keys: ['Ctrl', 'Z'], desc: '撤销' },
+                { keys: ['Ctrl', 'Shift', 'Z'], desc: '重做' },
+                { keys: ['Ctrl', 'S'], desc: '保存编辑' },
+                { keys: ['Ctrl', 'Enter'], desc: '解析补丁' },
+                { keys: ['Alt', '↑'], desc: '上一个补丁' },
+                { keys: ['Alt', '↓'], desc: '下一个补丁' },
+                { keys: ['Ctrl', 'N'], desc: '从模板新建' },
+                { keys: ['Esc'], desc: '取消/关闭' },
+                { keys: ['?'], desc: '显示帮助' },
+              ].map(({ keys, desc }) => (
+                <div key={desc} className="flex items-center justify-between p-2 rounded-lg bg-gray-900/50">
+                  <span className="text-gray-400 text-sm">{desc}</span>
+                  <div className="flex gap-1">
+                    {keys.map(k => <span key={k} className="kbd">{k}</span>)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="mt-6 pt-4 border-t border-gray-700 text-center text-sm text-gray-500">
+            按 <span className="kbd">Esc</span> 关闭
+          </div>
+        </div>
+      </div>
+    );
+
+    // ============================================================================
+    // Template Selector Modal
+    // ============================================================================
+    const TemplateSelector = ({ onSelect, onClose }) => {
+      const [search, setSearch] = useState('');
+      
+      const filteredTemplates = useMemo(() => {
+        if (!search) return PATCH_TEMPLATES;
+        const q = search.toLowerCase();
+        return PATCH_TEMPLATES.filter(t => 
+          t.name.toLowerCase().includes(q) || 
+          t.description.toLowerCase().includes(q) ||
+          t.operation.toLowerCase().includes(q)
+        );
+      }, [search]);
+      
+      return (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+          <div className="template-dropdown bg-gray-800 rounded-2xl border border-gray-700 max-w-2xl w-full p-6 shadow-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                <Icons.Template />
+                补丁模板
+              </h2>
+              <button onClick={onClose} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400">
+                <Icons.X />
+              </button>
+            </div>
+            
+            <div className="relative mb-4">
+              <Icons.Search />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="搜索模板..."
+                className="w-full bg-gray-900/50 border border-gray-700 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:border-violet-500 focus:outline-none"
+                autoFocus
+              />
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                <Icons.Search />
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto space-y-2">
+              {filteredTemplates.map(template => {
+                const color = opColors[template.operation];
+                return (
+                  <button
+                    key={template.id}
+                    onClick={() => { onSelect(template); onClose(); }}
+                    className="w-full p-4 rounded-xl border border-gray-700 hover:border-violet-500/50 hover:bg-gray-700/30 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="text-2xl">{template.icon}</span>
+                      <div className="flex-1">
+                        <div className="font-medium text-white group-hover:text-violet-300">{template.name}</div>
+                        <div className="text-xs text-gray-500">{template.description}</div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-xs font-mono ${color?.text} ${color?.bg} border ${color?.border}`}>
+                        {template.operation}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+              
+              {filteredTemplates.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  未找到匹配的模板
+                </div>
+              )}
+            </div>
+            
+            <div className="mt-4 pt-4 border-t border-gray-700 text-center text-xs text-gray-500">
+              选择模板后可在编辑器中修改 · 按 <span className="kbd">Esc</span> 关闭
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ============================================================================
+    // Smart Suggestion Panel
+    // ============================================================================
+    const SmartSuggestionPanel = ({ suggestions, onApply, fileName }) => {
+      const lang = getLanguageFromFileName(fileName);
+      
+      return (
+        <div className="mt-3 p-4 bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 rounded-xl border border-violet-500/30">
+          <div className="flex items-center gap-2 text-sm font-medium text-violet-300 mb-3">
+            <Icons.Wand />
+            智能建议 - 相似代码段
+          </div>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {suggestions.map((sug, idx) => (
+              <div 
+                key={idx}
+                className="p-3 bg-black/30 rounded-lg border border-gray-700 hover:border-violet-500/50 cursor-pointer transition-all group"
+                onClick={() => onApply(sug)}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Icons.MapPin />
+                    <span className="text-sm font-medium text-violet-300">行 {sug.line}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      sug.similarity >= 80 ? 'bg-green-500/20 text-green-400' :
+                      sug.similarity >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-orange-500/20 text-orange-400'
+                    }`}>
+                      {sug.similarity}% 相似
+                    </span>
+                    <span className="text-xs text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                      点击应用
+                    </span>
+                  </div>
+                </div>
+                <SyntaxHighlightedCode 
+                  code={sug.preview} 
+                  language={lang}
+                  className="text-xs"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 text-xs text-gray-500 flex items-center gap-1">
+            <Icons.Info />
+            点击建议可自动更新锚点
+          </div>
+        </div>
+      );
+    };
+
+    // ============================================================================
+    // DiffView Component with Inline Diff
+    // ============================================================================
+    const DiffView = ({ original, modified, fileName, showInlineDiff = true }) => {
+      const lang = getLanguageFromFileName(fileName);
+      
+      const diff = useMemo(() => {
+        if (!original && !modified) return [];
+        const oldLines = (original || '').split('\n');
+        const newLines = (modified || '').split('\n');
+        const result = [];
+        
+        let i = 0, j = 0;
+        while (i < oldLines.length || j < newLines.length) {
+          if (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
+            result.push({ type: 'same', content: oldLines[i], lineOld: i + 1, lineNew: j + 1 });
+            i++; j++;
+          } else if (j < newLines.length && (i >= oldLines.length || !oldLines.includes(newLines[j]))) {
+            // Check for inline diff with previous del line
+            const prevDel = result.length > 0 && result[result.length - 1].type === 'del' ? result[result.length - 1] : null;
+            if (showInlineDiff && prevDel) {
+              const inlineDiff = computeInlineDiff(prevDel.content, newLines[j]);
+              prevDel.inlineDiff = inlineDiff.oldParts;
+              result.push({ type: 'add', content: newLines[j], lineNew: j + 1, inlineDiff: inlineDiff.newParts });
+            } else {
+              result.push({ type: 'add', content: newLines[j], lineNew: j + 1 });
+            }
+            j++;
+          } else if (i < oldLines.length) {
+            result.push({ type: 'del', content: oldLines[i], lineOld: i + 1 });
+            i++;
+          }
+        }
+        return result;
+      }, [original, modified, showInlineDiff]);
+      
+      const renderLine = (line) => {
+        if (line.inlineDiff) {
+          return <span dangerouslySetInnerHTML={{ __html: renderInlineDiff(line.inlineDiff) }} />;
+        }
+        // Apply syntax highlighting for unchanged lines
+        if (line.type === 'same') {
+          return <span dangerouslySetInnerHTML={{ __html: highlightCode(line.content, lang) }} />;
+        }
+        return line.content;
+      };
+      
+      return (
+        <div className="bg-gray-900/50 rounded-xl overflow-hidden border border-gray-700/50">
+          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700/50 bg-gray-800/30">
+            <span className="text-xs text-gray-400 font-mono">{fileName}</span>
+            <span className="text-xs text-gray-500">
+              {diff.filter(d => d.type === 'add').length} 添加 / {diff.filter(d => d.type === 'del').length} 删除
+            </span>
+          </div>
+          <div className="overflow-x-auto max-h-96">
+            <pre className="text-sm font-mono">
+              {diff.map((line, idx) => (
+                <div key={idx} className={`px-4 py-0.5 flex ${
+                  line.type === 'add' ? 'bg-green-500/10 text-green-300' : 
+                  line.type === 'del' ? 'bg-red-500/10 text-red-300' : 
+                  'text-gray-400'
+                }`}>
+                  <span className="w-12 text-gray-600 select-none text-right pr-2 shrink-0">{line.lineOld || ''}</span>
+                  <span className="w-12 text-gray-600 select-none text-right pr-2 shrink-0">{line.lineNew || ''}</span>
+                  <span className="w-6 select-none shrink-0">{line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' '}</span>
+                  <span className="flex-1 whitespace-pre">{renderLine(line)}</span>
+                </div>
+              ))}
+            </pre>
+          </div>
+        </div>
+      );
+    };
+
+    // ============================================================================
+    // Dependency Visualization Component
+    // ============================================================================
+    const DependencyGraph = ({ patches, dependencies, onPatchClick }) => {
+      const fileGroups = useMemo(() => {
+        const groups = {};
+        patches.forEach((patch, index) => {
+          const file = patch.file;
+          if (!groups[file]) groups[file] = [];
+          groups[file].push({ patch, index });
+        });
+        return groups;
+      }, [patches]);
+      
+      const contentDeps = dependencies.filter(d => d.type === 'content');
+      
+      return (
+        <div className="bg-gray-800/30 rounded-xl border border-gray-700/50 p-4">
+          <div className="flex items-center gap-2 mb-4 text-sm font-medium text-gray-300">
+            <Icons.Network />
+            补丁依赖关系
+          </div>
+          
+          <div className="space-y-4">
+            {Object.entries(fileGroups).map(([file, group]) => (
+              <div key={file} className="bg-gray-900/50 rounded-lg p-3">
+                <div className="text-xs text-gray-500 font-mono mb-2 flex items-center gap-2">
+                  <Icons.FileText />
+                  {file}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {group.map(({ patch, index }) => {
+                    const hasContentDep = contentDeps.some(d => d.to === index);
+                    const color = opColors[patch.operation] || opColors.REPLACE;
+                    return (
+                      <button
+                        key={patch.id}
+                        onClick={() => onPatchClick(patch.id)}
+                        className={`relative px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${color.bg} ${color.text} border ${color.border} hover:scale-105`}
+                      >
+                        #{index + 1} {patch.operation}
+                        {hasContentDep && (
+                          <span className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full flex items-center justify-center text-[8px] text-white">
+                            ⚡
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {group.length > 1 && (
+                  <div className="mt-2 text-xs text-gray-600 flex items-center gap-1">
+                    <Icons.ArrowDown />
+                    执行顺序：从左到右
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          
+          {contentDeps.length > 0 && (
+            <div className="mt-4 p-3 bg-orange-500/10 rounded-lg border border-orange-500/30">
+              <div className="text-xs font-medium text-orange-300 mb-2">⚡ 内容依赖</div>
+              <div className="space-y-1">
+                {contentDeps.map((dep, i) => (
+                  <div key={i} className="text-xs text-orange-200/70">
+                    补丁 #{dep.from + 1} → #{dep.to + 1}（锚点依赖前序内容）
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          <div className="mt-3 text-xs text-gray-500">
+            💡 同一文件的补丁按顺序依次应用，带 ⚡ 标记表示锚点依赖前序补丁的输出
+          </div>
+        </div>
+      );
+    };
+
+    // ============================================================================
+    // PatchCard Component
     // ============================================================================
     const PatchCard = ({ 
       patch, 
@@ -378,11 +1138,20 @@ ${patch.content}`;
       expanded, 
       onToggle, 
       onDelete, 
-      onUpdate, 
-      fileContent,        // 原始文件内容
-      accumulatedContent, // 累积内容（应用前序补丁后）
+      onUpdate,
+      onMoveUp,
+      onMoveDown,
+      canMoveUp,
+      canMoveDown,
+      fileContent,
+      accumulatedContent,
       fuzzyMatch,
-      isIncremental       // 是否基于增量内容匹配
+      onDragStart,
+      onDragOver,
+      onDrop,
+      isDragging,
+      isDropTarget,
+      isActive
     }) => {
       const [isEditing, setIsEditing] = useState(false);
       const [editData, setEditData] = useState({
@@ -391,32 +1160,21 @@ ${patch.content}`;
         anchor: patch.anchor,
         content: patch.content
       });
-      const [showWhitespace, setShowWhitespace] = useState(false);
-      const [showDebug, setShowDebug] = useState(false);
 
       const validation = useMemo(() => validatePatch(patch), [patch]);
-      
-      // 使用累积内容进行匹配（支持增量补丁）
       const effectiveContent = accumulatedContent || fileContent;
+      const language = getLanguageFromFileName(patch.file);
       
       const applyResult = useMemo(() => {
-        if (patch.operation === 'CREATE') {
-          return simulateApply('', patch, false);
-        }
+        if (patch.operation === 'CREATE') return simulateApply('', patch, false);
         if (!effectiveContent) return null;
         
-        // 先用累积内容尝试精确匹配
         const exactResult = simulateApply(effectiveContent, patch, false, patch.selectedMatchIndex);
-        if (exactResult.success) {
-          return { ...exactResult, usedAccumulated: !!accumulatedContent };
-        }
+        if (exactResult.success) return { ...exactResult, usedAccumulated: !!accumulatedContent };
         
-        // 精确匹配失败，尝试宽松匹配
         if (fuzzyMatch) {
           const fuzzyResult = simulateApply(effectiveContent, patch, true, patch.selectedMatchIndex);
-          if (fuzzyResult.success) {
-            return { ...fuzzyResult, wasFuzzy: true, usedAccumulated: !!accumulatedContent };
-          }
+          if (fuzzyResult.success) return { ...fuzzyResult, wasFuzzy: true, usedAccumulated: !!accumulatedContent };
           return { ...fuzzyResult, usedAccumulated: !!accumulatedContent };
         }
         
@@ -425,31 +1183,9 @@ ${patch.content}`;
       
       const color = opColors[patch.operation] || opColors.REPLACE;
 
-      const handleStartEdit = (e) => {
-        e.stopPropagation();
-        setEditData({
-          file: patch.file,
-          operation: patch.operation,
-          anchor: patch.anchor,
-          content: patch.content
-        });
-        setIsEditing(true);
-      };
-
-      const handleCancelEdit = (e) => {
-        e.stopPropagation();
-        setIsEditing(false);
-      };
-
       const handleSaveEdit = (e) => {
-        e.stopPropagation();
-        const updatedPatch = {
-          ...patch,
-          ...editData,
-          raw: generateRaw(editData),
-          selectedMatchIndex: null // 重置选择
-        };
-        onUpdate(updatedPatch);
+        e?.stopPropagation();
+        onUpdate({ ...patch, ...editData, raw: generateRaw(editData), selectedMatchIndex: null });
         setIsEditing(false);
       };
 
@@ -457,31 +1193,45 @@ ${patch.content}`;
         onUpdate({ ...patch, selectedMatchIndex: matchIdx });
       };
 
+      const handleApplySuggestion = (suggestion) => {
+        // Update anchor with the suggested code
+        const newAnchor = suggestion.preview;
+        setEditData(prev => ({ ...prev, anchor: newAnchor }));
+        onUpdate({ ...patch, anchor: newAnchor, raw: generateRaw({ ...patch, anchor: newAnchor }), selectedMatchIndex: null });
+      };
+
       const handleKeyDown = (e) => {
         if (e.key === 'Tab') {
           e.preventDefault();
           const target = e.target;
           const start = target.selectionStart;
-          const end = target.selectionEnd;
-          const value = target.value;
-          const newValue = value.substring(0, start) + '  ' + value.substring(end);
-          
+          const newValue = target.value.substring(0, start) + '  ' + target.value.substring(target.selectionEnd);
           const fieldName = target.dataset.field;
           if (fieldName) {
             setEditData(prev => ({ ...prev, [fieldName]: newValue }));
-            setTimeout(() => {
-              target.selectionStart = target.selectionEnd = start + 2;
-            }, 0);
+            setTimeout(() => { target.selectionStart = target.selectionEnd = start + 2; }, 0);
           }
+        }
+        // Ctrl+S to save while editing
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+          e.preventDefault();
+          handleSaveEdit();
         }
       };
       
       return (
-        <div className={`rounded-xl border ${color.border} ${color.bg} overflow-hidden transition-all duration-200`}>
-          <div 
-            className="flex items-center gap-3 p-4 cursor-pointer hover:bg-white/5 transition-colors"
-            onClick={onToggle}
-          >
+        <div 
+          className={`rounded-xl border ${color.border} ${color.bg} overflow-hidden transition-all duration-200 ${isDragging ? 'dragging' : ''} ${isDropTarget ? 'drag-over' : ''} ${isActive ? 'patch-active' : ''}`}
+          draggable
+          onDragStart={(e) => onDragStart(e, index)}
+          onDragOver={(e) => onDragOver(e, index)}
+          onDrop={(e) => onDrop(e, index)}
+        >
+          <div className="flex items-center gap-2 p-4 cursor-pointer hover:bg-white/5" onClick={onToggle}>
+            <div className="drag-handle text-gray-600 hover:text-gray-400" onClick={(e) => e.stopPropagation()}>
+              <Icons.GripVertical />
+            </div>
+            
             <div className="text-gray-500">
               {expanded ? <Icons.ChevronDown /> : <Icons.ChevronRight />}
             </div>
@@ -510,29 +1260,22 @@ ${patch.content}`;
                 onChange={(e) => setEditData(prev => ({ ...prev, file: e.target.value }))}
                 onClick={(e) => e.stopPropagation()}
                 className="text-gray-300 font-mono text-sm flex-1 bg-black/30 border border-gray-600 rounded px-2 py-0.5"
-                placeholder="文件路径"
               />
             ) : (
               <span className="text-gray-300 font-mono text-sm flex-1 truncate">{patch.file}</span>
             )}
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               {!isEditing && (
                 <>
                   {applyResult?.usedAccumulated && applyResult?.success && (
-                    <span className="flex items-center gap-1 text-cyan-400 text-xs" title="基于增量内容匹配">
-                      <Icons.Layers />
-                    </span>
+                    <span className="text-cyan-400 text-xs" title="增量匹配"><Icons.Layers /></span>
                   )}
                   {applyResult?.wasFuzzy && (
-                    <span className="flex items-center gap-1 text-yellow-500 text-xs" title="宽松匹配">
-                      <Icons.Zap />
-                    </span>
+                    <span className="text-yellow-500 text-xs" title="宽松匹配"><Icons.Zap /></span>
                   )}
                   {patch.selectedMatchIndex !== null && (
-                    <span className="flex items-center gap-1 text-orange-400 text-xs" title={`已选择第${patch.selectedMatchIndex + 1}处匹配`}>
-                      <Icons.Target />
-                    </span>
+                    <span className="text-orange-400 text-xs" title={`已选择第${patch.selectedMatchIndex + 1}处`}><Icons.Target /></span>
                   )}
                   {validation.warnings.length > 0 && (
                     <span className="text-yellow-500"><Icons.AlertTriangle /></span>
@@ -547,14 +1290,33 @@ ${patch.content}`;
               )}
             </div>
             
+            <div className="flex items-center gap-1">
+              <button
+                onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
+                disabled={!canMoveUp}
+                className="p-1 rounded hover:bg-gray-700/50 text-gray-500 hover:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                title="上移 (Alt+↑)"
+              >
+                <Icons.ArrowUp />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
+                disabled={!canMoveDown}
+                className="p-1 rounded hover:bg-gray-700/50 text-gray-500 hover:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                title="下移 (Alt+↓)"
+              >
+                <Icons.ArrowDown />
+              </button>
+            </div>
+            
             {isEditing ? (
               <div className="flex items-center gap-1">
-                <button onClick={handleSaveEdit} className="p-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400"><Icons.Save /></button>
-                <button onClick={handleCancelEdit} className="p-1.5 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-gray-400"><Icons.X /></button>
+                <button onClick={handleSaveEdit} className="p-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400" title="保存 (Ctrl+S)"><Icons.Save /></button>
+                <button onClick={(e) => { e.stopPropagation(); setIsEditing(false); }} className="p-1.5 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-gray-400" title="取消 (Esc)"><Icons.X /></button>
               </div>
             ) : (
               <div className="flex items-center gap-1">
-                <button onClick={handleStartEdit} className="p-1.5 rounded-lg hover:bg-violet-500/20 text-gray-500 hover:text-violet-400"><Icons.Edit /></button>
+                <button onClick={(e) => { e.stopPropagation(); setEditData({ file: patch.file, operation: patch.operation, anchor: patch.anchor, content: patch.content }); setIsEditing(true); }} className="p-1.5 rounded-lg hover:bg-violet-500/20 text-gray-500 hover:text-violet-400"><Icons.Edit /></button>
                 <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 rounded-lg hover:bg-red-500/20 text-gray-500 hover:text-red-400"><Icons.Trash2 /></button>
               </div>
             )}
@@ -583,14 +1345,13 @@ ${patch.content}`;
                     )}
                   </div>
                   
-                  {/* 多目标匹配选择器 */}
                   {!applyResult.success && applyResult.multipleMatches && (
                     <div className="mt-3 p-4 bg-orange-500/10 rounded-lg border border-orange-500/30">
                       <div className="flex items-center gap-2 text-sm font-medium text-orange-300 mb-3">
                         <Icons.Target />
-                        找到 {applyResult.matchCount} 处匹配，请选择要应用的位置：
+                        找到 {applyResult.matchCount} 处匹配，请选择：
                       </div>
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
                         {applyResult.multipleMatches.map((match, idx) => (
                           <div 
                             key={idx}
@@ -603,53 +1364,35 @@ ${patch.content}`;
                           >
                             <div className="flex items-center gap-2 mb-2">
                               <Icons.MapPin />
-                              <span className="text-sm font-medium text-orange-300">
-                                位置 {idx + 1}: 行 {match.line}
-                              </span>
+                              <span className="text-sm font-medium text-orange-300">位置 {idx + 1}: 行 {match.line}</span>
                               {patch.selectedMatchIndex === idx && (
                                 <span className="text-xs bg-orange-500/30 px-2 py-0.5 rounded text-orange-200">已选择</span>
                               )}
                             </div>
-                            <pre className="text-xs text-gray-400 bg-black/30 rounded p-2 overflow-x-auto whitespace-pre font-mono">
-                              {match.preview}
-                            </pre>
+                            <SyntaxHighlightedCode code={match.preview} language={language} className="text-xs" />
                           </div>
                         ))}
                       </div>
-                      <div className="mt-3 text-xs text-orange-200/70">
-                        💡 点击选择要应用补丁的位置，或修改锚点使其更加唯一
-                      </div>
                     </div>
                   )}
                   
-                  {/* 调试信息 */}
-                  {!applyResult.success && applyResult.debugInfo && !applyResult.multipleMatches && (
-                    <div className="mt-2 p-3 bg-black/30 rounded-lg border border-gray-700">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-gray-400">调试信息</span>
-                        <button onClick={(e) => { e.stopPropagation(); setShowDebug(!showDebug); }} className="text-xs text-gray-500 hover:text-gray-300">
-                          {showDebug ? '隐藏' : '显示'}
-                        </button>
-                      </div>
-                      {showDebug && (
-                        <div className="space-y-1 text-xs text-gray-500">
-                          <div>锚点长度: {applyResult.debugInfo.anchorLength} 字符</div>
-                          <div>包含Tab: {applyResult.debugInfo.hasTab ? '是 ⚠️' : '否'}</div>
-                          <div>行尾空白: {applyResult.debugInfo.hasTrailingSpace ? '是 ⚠️' : '否'}</div>
-                          <div>行数: {applyResult.debugInfo.lineCount}</div>
-                        </div>
-                      )}
-                    </div>
+                  {/* Smart Suggestions */}
+                  {!applyResult.success && applyResult.smartSuggestions && !applyResult.multipleMatches && (
+                    <SmartSuggestionPanel 
+                      suggestions={applyResult.smartSuggestions} 
+                      onApply={handleApplySuggestion}
+                      fileName={patch.file}
+                    />
                   )}
                   
-                  {/* 相似内容提示 */}
-                  {!applyResult.success && applyResult.similar && !applyResult.multipleMatches && (
+                  {/* Legacy similar content (fallback) */}
+                  {!applyResult.success && applyResult.similar && !applyResult.multipleMatches && !applyResult.smartSuggestions && (
                     <div className="mt-2 p-3 bg-blue-500/10 rounded-lg border border-blue-500/30">
                       <div className="text-xs font-medium text-blue-400 mb-2">首行相似内容：</div>
                       {applyResult.similar.map((sim, idx) => (
                         <div key={idx} className="mt-2 text-xs">
                           <div className="text-gray-400 mb-1">行 {sim.line}:</div>
-                          <pre className="bg-black/30 rounded p-2 text-gray-300 overflow-x-auto font-mono text-xs">{sim.preview}</pre>
+                          <SyntaxHighlightedCode code={sim.preview} language={language} className="text-xs" />
                         </div>
                       ))}
                     </div>
@@ -661,12 +1404,6 @@ ${patch.content}`;
                 <div>
                   <div className="text-xs text-gray-500 mb-1.5 font-medium flex items-center justify-between">
                     <span>ANCHOR</span>
-                    {!isEditing && (
-                      <button onClick={(e) => { e.stopPropagation(); setShowWhitespace(!showWhitespace); }} className="flex items-center gap-1 text-gray-600 hover:text-gray-400">
-                        {showWhitespace ? <Icons.EyeOff /> : <Icons.Eye />}
-                        <span className="text-xs">{showWhitespace ? '隐藏空白' : '显示空白'}</span>
-                      </button>
-                    )}
                   </div>
                   {isEditing ? (
                     <textarea
@@ -674,12 +1411,10 @@ ${patch.content}`;
                       onChange={(e) => setEditData(prev => ({ ...prev, anchor: e.target.value }))}
                       onKeyDown={handleKeyDown}
                       data-field="anchor"
-                      className="edit-area w-full bg-black/30 rounded-lg p-3 text-sm text-gray-300 font-mono leading-relaxed whitespace-pre border border-gray-600 focus:border-violet-500 resize-y min-h-[100px]"
+                      className="edit-area w-full bg-black/30 rounded-lg p-3 text-sm text-gray-300 font-mono whitespace-pre border border-gray-600 focus:border-violet-500 resize-y min-h-[80px]"
                     />
                   ) : (
-                    <pre className={`bg-black/30 rounded-lg p-3 text-sm text-gray-300 overflow-x-auto font-mono leading-relaxed ${showWhitespace ? 'whitespace-visible' : 'whitespace-pre'}`}>
-                      {showWhitespace ? visualizeWhitespace(patch.anchor) : patch.anchor}
-                    </pre>
+                    <SyntaxHighlightedCode code={patch.anchor} language={language} className="text-gray-300" />
                   )}
                 </div>
               )}
@@ -693,10 +1428,10 @@ ${patch.content}`;
                       onChange={(e) => setEditData(prev => ({ ...prev, content: e.target.value }))}
                       onKeyDown={handleKeyDown}
                       data-field="content"
-                      className="edit-area w-full bg-black/30 rounded-lg p-3 text-sm text-green-300 font-mono leading-relaxed whitespace-pre border border-gray-600 focus:border-violet-500 resize-y min-h-[100px]"
+                      className="edit-area w-full bg-black/30 rounded-lg p-3 text-sm text-green-300 font-mono whitespace-pre border border-gray-600 focus:border-violet-500 resize-y min-h-[80px]"
                     />
                   ) : (
-                    <pre className="bg-black/30 rounded-lg p-3 text-sm text-green-300 overflow-x-auto font-mono leading-relaxed whitespace-pre">{patch.content}</pre>
+                    <SyntaxHighlightedCode code={patch.content} language={language} className="text-green-300" />
                   )}
                 </div>
               )}
@@ -704,9 +1439,9 @@ ${patch.content}`;
               {isEditing && (
                 <div className="flex items-center gap-2 pt-2 border-t border-gray-700/50">
                   <button onClick={handleSaveEdit} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 text-sm font-medium">
-                    <Icons.Save /> 保存修改
+                    <Icons.Save /> 保存 <span className="kbd text-[10px]">Ctrl+S</span>
                   </button>
-                  <button onClick={handleCancelEdit} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-gray-400 text-sm font-medium">
+                  <button onClick={(e) => { e.stopPropagation(); setIsEditing(false); }} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-gray-400 text-sm font-medium">
                     <Icons.X /> 取消
                   </button>
                 </div>
@@ -717,49 +1452,11 @@ ${patch.content}`;
       );
     };
 
-    const DiffView = ({ original, modified }) => {
-      const diff = useMemo(() => {
-        if (!original && !modified) return [];
-        const oldLines = (original || '').split('\n');
-        const newLines = (modified || '').split('\n');
-        const result = [];
-        
-        let i = 0, j = 0;
-        while (i < oldLines.length || j < newLines.length) {
-          if (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
-            result.push({ type: 'same', content: oldLines[i], lineOld: i + 1, lineNew: j + 1 });
-            i++; j++;
-          } else if (j < newLines.length && (i >= oldLines.length || !oldLines.includes(newLines[j]))) {
-            result.push({ type: 'add', content: newLines[j], lineNew: j + 1 });
-            j++;
-          } else if (i < oldLines.length) {
-            result.push({ type: 'del', content: oldLines[i], lineOld: i + 1 });
-            i++;
-          }
-        }
-        return result;
-      }, [original, modified]);
-      
-      return (
-        <div className="bg-gray-900/50 rounded-xl overflow-hidden border border-gray-700/50">
-          <div className="overflow-x-auto max-h-96">
-            <pre className="text-sm font-mono">
-              {diff.map((line, idx) => (
-                <div key={idx} className={`px-4 py-0.5 flex ${line.type === 'add' ? 'bg-green-500/10 text-green-300' : line.type === 'del' ? 'bg-red-500/10 text-red-300' : 'text-gray-400'}`}>
-                  <span className="w-12 text-gray-600 select-none text-right pr-2">{line.lineOld || ''}</span>
-                  <span className="w-12 text-gray-600 select-none text-right pr-2">{line.lineNew || ''}</span>
-                  <span className="w-6 select-none">{line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' '}</span>
-                  <span className="flex-1 whitespace-pre">{line.content}</span>
-                </div>
-              ))}
-            </pre>
-          </div>
-        </div>
-      );
-    };
-
+    // ============================================================================
+    // Toast Component
+    // ============================================================================
     const Toast = ({ message, type, onClose }) => {
-      React.useEffect(() => {
+      useEffect(() => {
         const timer = setTimeout(onClose, 3000);
         return () => clearTimeout(timer);
       }, [onClose]);
@@ -770,104 +1467,288 @@ ${patch.content}`;
         info: 'bg-blue-500/20 border-blue-500/50 text-blue-300'
       };
 
-      return (
-        <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg border ${colors[type]} z-50`}>{message}</div>
-      );
+      return <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg border ${colors[type]} z-50`}>{message}</div>;
     };
 
     // ============================================================================
-    // 主应用组件
+    // Main App Component
     // ============================================================================
     function FIUPApp() {
       const [patchText, setPatchText] = useState('');
-      const [patches, setPatches] = useState([]);
-      const [files, setFiles] = useState({});
+      const patchHistory = useHistory([]);
+      const fileHistory = useHistory({});
       const [expandedPatch, setExpandedPatch] = useState(null);
+      const [activePatchIndex, setActivePatchIndex] = useState(0);
       const [activeTab, setActiveTab] = useState('input');
       const [previewFile, setPreviewFile] = useState(null);
       const [toast, setToast] = useState(null);
       const [isDragging, setIsDragging] = useState(false);
       const [fuzzyMatch, setFuzzyMatch] = useState(true);
-      const [incrementalMode, setIncrementalMode] = useState(true); // 新增：增量模式开关
+      const [incrementalMode, setIncrementalMode] = useState(true);
+      const [showDeps, setShowDeps] = useState(false);
+      const [dragIndex, setDragIndex] = useState(null);
+      const [dropIndex, setDropIndex] = useState(null);
+      const [showShortcuts, setShowShortcuts] = useState(false);
+      const [showTemplates, setShowTemplates] = useState(false);
+      
+      const patches = patchHistory.current;
+      const files = fileHistory.current;
+      
+      const setPatches = useCallback((newPatches) => {
+        const result = typeof newPatches === 'function' ? newPatches(patches) : newPatches;
+        patchHistory.push(result);
+      }, [patches, patchHistory]);
+      
+      const setFiles = useCallback((newFiles) => {
+        const result = typeof newFiles === 'function' ? newFiles(files) : newFiles;
+        fileHistory.push(result);
+      }, [files, fileHistory]);
       
       const showToast = (message, type = 'info') => setToast({ message, type });
       
-      // ============================================================================
-      // 计算每个补丁的累积内容（关键修复）
-      // ============================================================================
+      // Keyboard shortcuts
+      useKeyboardShortcuts({
+        undo: () => {
+          if (patchHistory.canUndo) { patchHistory.undo(); showToast('撤销', 'info'); }
+          if (fileHistory.canUndo) fileHistory.undo();
+        },
+        redo: () => {
+          if (patchHistory.canRedo) { patchHistory.redo(); showToast('重做', 'info'); }
+          if (fileHistory.canRedo) fileHistory.redo();
+        },
+        parse: () => {
+          if (activeTab === 'input' && patchText.trim()) handleParse();
+        },
+        prevPatch: () => {
+          if (patches.length > 0 && activePatchIndex > 0) {
+            const newIndex = activePatchIndex - 1;
+            setActivePatchIndex(newIndex);
+            setExpandedPatch(patches[newIndex].id);
+            setActiveTab('patches');
+          }
+        },
+        nextPatch: () => {
+          if (patches.length > 0 && activePatchIndex < patches.length - 1) {
+            const newIndex = activePatchIndex + 1;
+            setActivePatchIndex(newIndex);
+            setExpandedPatch(patches[newIndex].id);
+            setActiveTab('patches');
+          }
+        },
+        escape: () => {
+          setShowShortcuts(false);
+          setShowTemplates(false);
+        },
+        newPatch: () => setShowTemplates(true),
+        showHelp: () => setShowShortcuts(true),
+      });
+      
+      // Drag and Drop handlers
+      const handleDragStart = useCallback((e, index) => {
+        setDragIndex(index);
+        e.dataTransfer.effectAllowed = 'move';
+      }, []);
+      
+      const handleDragOver = useCallback((e, index) => {
+        e.preventDefault();
+        setDropIndex(index);
+      }, []);
+      
+      const handlePatchDrop = useCallback((e, toIndex) => {
+        e.preventDefault();
+        if (dragIndex !== null && dragIndex !== toIndex) {
+          setPatches(prev => {
+            const newPatches = [...prev];
+            const [removed] = newPatches.splice(dragIndex, 1);
+            newPatches.splice(toIndex, 0, removed);
+            return newPatches;
+          });
+          showToast(`补丁 #${dragIndex + 1} 移动到 #${toIndex + 1}`, 'success');
+        }
+        setDragIndex(null);
+        setDropIndex(null);
+      }, [dragIndex, setPatches]);
+      
+      // Move patch up/down
+      const movePatch = useCallback((index, direction) => {
+        const newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= patches.length) return;
+        
+        setPatches(prev => {
+          const newPatches = [...prev];
+          [newPatches[index], newPatches[newIndex]] = [newPatches[newIndex], newPatches[index]];
+          return newPatches;
+        });
+        setActivePatchIndex(newIndex);
+        showToast(`补丁 #${index + 1} ${direction < 0 ? '上移' : '下移'}`, 'success');
+      }, [patches.length, setPatches]);
+      
+      // Accumulated contents calculation
       const accumulatedContents = useMemo(() => {
         if (!incrementalMode) return {};
         
         const result = {};
-        const fileContents = {}; // 每个文件的当前累积内容
+        const fileContents = {};
         
-        patches.forEach((patch, index) => {
+        patches.forEach((patch) => {
           const fileName = patch.file;
           const shortName = fileName.split('/').pop();
-          
-          // 获取原始文件内容
           const originalContent = files[fileName] || files[shortName] || '';
           
-          // 如果是第一个操作该文件的补丁，使用原始内容
-          if (!fileContents[fileName]) {
-            fileContents[fileName] = originalContent;
-          }
+          if (!fileContents[fileName]) fileContents[fileName] = originalContent;
           
-          // CREATE 操作特殊处理
           if (patch.operation === 'CREATE') {
             result[patch.id] = '';
             fileContents[fileName] = patch.content;
             return;
           }
           
-          // 记录当前补丁应该使用的累积内容
           result[patch.id] = fileContents[fileName];
           
-          // 应用当前补丁，更新累积内容
           const applyResult = simulateApply(fileContents[fileName], patch, fuzzyMatch, patch.selectedMatchIndex);
-          if (applyResult.success) {
-            fileContents[fileName] = applyResult.result;
-          }
+          if (applyResult.success) fileContents[fileName] = applyResult.result;
         });
         
         return result;
       }, [patches, files, fuzzyMatch, incrementalMode]);
+      
+      // Dependencies
+      const dependencies = useMemo(() => analyzeDependencies(patches, files, fuzzyMatch), [patches, files, fuzzyMatch]);
       
       const handleParse = useCallback(() => {
         const parsed = parseFIUP(patchText);
         setPatches(parsed);
         if (parsed.length > 0) {
           setExpandedPatch(parsed[0].id);
+          setActivePatchIndex(0);
           setActiveTab('patches');
           showToast(`成功解析 ${parsed.length} 个补丁`, 'success');
         } else {
           showToast('未找到有效的 FIUP 补丁', 'error');
         }
-      }, [patchText]);
+      }, [patchText, setPatches]);
       
-      const handleFileUpload = useCallback((e) => {
+      // Handle template selection
+      const handleTemplateSelect = useCallback((template) => {
+        const newPatch = {
+          id: crypto.randomUUID(),
+          file: 'path/to/file.py',
+          operation: template.operation,
+          anchor: template.template.anchor,
+          content: template.template.content,
+          raw: '',
+          selectedMatchIndex: null
+        };
+        newPatch.raw = generateRaw(newPatch);
+        
+        setPatches(prev => [...prev, newPatch]);
+        setExpandedPatch(newPatch.id);
+        setActivePatchIndex(patches.length);
+        setActiveTab('patches');
+        showToast(`已添加模板: ${template.name}`, 'success');
+      }, [patches.length, setPatches]);
+      
+      // File upload handlers
+      const handleFileUpload = useCallback(async (e) => {
         const uploadedFiles = Array.from(e.target.files);
-        uploadedFiles.forEach(file => {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            setFiles(prev => ({ ...prev, [file.name]: event.target.result }));
-            showToast(`已加载文件: ${file.name}`, 'success');
-          };
-          reader.readAsText(file);
-        });
+        const newFiles = {};
+        
+        for (const file of uploadedFiles) {
+          if (file.name.endsWith('.zip')) {
+            try {
+              const zip = await JSZip.loadAsync(file);
+              const promises = [];
+              
+              zip.forEach((relativePath, zipEntry) => {
+                if (!zipEntry.dir && !relativePath.startsWith('__MACOSX') && !relativePath.startsWith('.')) {
+                  promises.push(
+                    zipEntry.async('string').then(content => {
+                      newFiles[relativePath] = content;
+                    }).catch(() => {})
+                  );
+                }
+              });
+              
+              await Promise.all(promises);
+              showToast(`从 ${file.name} 解压 ${Object.keys(newFiles).length} 个文件`, 'success');
+            } catch (err) {
+              showToast(`解压失败: ${err.message}`, 'error');
+            }
+          } else {
+            const content = await file.text();
+            const path = file.webkitRelativePath || file.name;
+            newFiles[path] = content;
+          }
+        }
+        
+        if (Object.keys(newFiles).length > 0) {
+          setFiles(prev => ({ ...prev, ...newFiles }));
+          if (!uploadedFiles[0]?.name.endsWith('.zip')) {
+            showToast(`已加载 ${Object.keys(newFiles).length} 个文件`, 'success');
+          }
+        }
+        
         e.target.value = '';
-      }, []);
+      }, [setFiles]);
 
-      const handleDrop = useCallback((e) => {
+      const handleFileDrop = useCallback(async (e) => {
         e.preventDefault();
         setIsDragging(false);
-        Array.from(e.dataTransfer.files).forEach(file => {
-          const reader = new FileReader();
-          reader.onload = (event) => setFiles(prev => ({ ...prev, [file.name]: event.target.result }));
-          reader.readAsText(file);
-        });
-        showToast(`已加载文件`, 'success');
-      }, []);
+        
+        const items = Array.from(e.dataTransfer.items);
+        const newFiles = {};
+        
+        const processEntry = async (entry, path = '') => {
+          if (entry.isFile) {
+            return new Promise((resolve) => {
+              entry.file(async (file) => {
+                if (file.name.endsWith('.zip')) {
+                  try {
+                    const zip = await JSZip.loadAsync(file);
+                    const promises = [];
+                    zip.forEach((relativePath, zipEntry) => {
+                      if (!zipEntry.dir && !relativePath.startsWith('__MACOSX')) {
+                        promises.push(
+                          zipEntry.async('string').then(content => {
+                            newFiles[relativePath] = content;
+                          }).catch(() => {})
+                        );
+                      }
+                    });
+                    await Promise.all(promises);
+                  } catch (err) {}
+                } else {
+                  const content = await file.text();
+                  newFiles[path + file.name] = content;
+                }
+                resolve();
+              });
+            });
+          } else if (entry.isDirectory) {
+            const reader = entry.createReader();
+            return new Promise((resolve) => {
+              reader.readEntries(async (entries) => {
+                for (const e of entries) {
+                  await processEntry(e, path + entry.name + '/');
+                }
+                resolve();
+              });
+            });
+          }
+        };
+        
+        for (const item of items) {
+          const entry = item.webkitGetAsEntry?.();
+          if (entry) {
+            await processEntry(entry);
+          }
+        }
+        
+        if (Object.keys(newFiles).length > 0) {
+          setFiles(prev => ({ ...prev, ...newFiles }));
+          showToast(`已加载 ${Object.keys(newFiles).length} 个文件`, 'success');
+        }
+      }, [setFiles]);
 
       const handleDeleteFile = useCallback((fileName) => {
         setFiles(prev => {
@@ -875,20 +1756,19 @@ ${patch.content}`;
           delete newFiles[fileName];
           return newFiles;
         });
-        showToast(`已移除文件: ${fileName}`, 'info');
-      }, []);
+        showToast(`已移除: ${fileName}`, 'info');
+      }, [setFiles]);
       
       const handleDeletePatch = useCallback((id) => {
         setPatches(prev => prev.filter(p => p.id !== id));
-      }, []);
+      }, [setPatches]);
 
       const handleUpdatePatch = useCallback((updatedPatch) => {
         setPatches(prev => prev.map(p => p.id === updatedPatch.id ? updatedPatch : p));
-        showToast('补丁已更新', 'success');
-      }, []);
+      }, [setPatches]);
       
       const handlePreview = useCallback((fileName) => {
-        const filePatches = patches.filter(p => p.file === fileName || p.file.endsWith('/' + fileName));
+        const filePatches = patches.filter(p => p.file === fileName || p.file.endsWith('/' + fileName) || fileName.endsWith(p.file));
         const originalContent = files[fileName] || '';
         let content = originalContent;
         
@@ -900,12 +1780,8 @@ ${patch.content}`;
         setPreviewFile({ name: fileName, original: originalContent, modified: content });
       }, [patches, files, fuzzyMatch]);
 
-      const handlePreviewCreate = useCallback((patch) => {
-        setPreviewFile({ name: patch.file, original: '', modified: patch.content, isCreate: true });
-      }, []);
-
       const handleApplyAndDownload = useCallback((fileName) => {
-        const filePatches = patches.filter(p => p.file === fileName || p.file.endsWith('/' + fileName));
+        const filePatches = patches.filter(p => p.file === fileName || p.file.endsWith('/' + fileName) || fileName.endsWith(p.file));
         
         const createPatch = filePatches.find(p => p.operation === 'CREATE');
         if (createPatch) {
@@ -916,11 +1792,11 @@ ${patch.content}`;
           a.download = fileName.split('/').pop();
           a.click();
           URL.revokeObjectURL(url);
-          showToast(`已创建并导出: ${fileName}`, 'success');
+          showToast(`已导出: ${fileName}`, 'success');
           return;
         }
         
-        const originalContent = files[fileName] || files[Object.keys(files).find(f => fileName.endsWith(f))] || '';
+        const originalContent = files[fileName] || Object.entries(files).find(([k]) => fileName.endsWith(k))?.[1] || '';
         if (!originalContent) {
           showToast(`请先上传文件: ${fileName}`, 'error');
           return;
@@ -931,10 +1807,7 @@ ${patch.content}`;
         
         for (const patch of filePatches) {
           const result = simulateApply(content, patch, fuzzyMatch, patch.selectedMatchIndex);
-          if (result.success) {
-            content = result.result;
-            successCount++;
-          }
+          if (result.success) { content = result.result; successCount++; }
         }
         
         if (successCount === 0) {
@@ -949,13 +1822,12 @@ ${patch.content}`;
         a.download = fileName.split('/').pop();
         a.click();
         URL.revokeObjectURL(url);
-        showToast(`已导出: ${fileName} (${successCount}/${filePatches.length} 补丁成功)`, 'success');
+        showToast(`已导出 (${successCount}/${filePatches.length} 成功)`, 'success');
       }, [patches, files, fuzzyMatch]);
       
       const handleCopyPatches = useCallback(() => {
-        const text = patches.map(p => p.raw).join('\n\n');
-        navigator.clipboard.writeText(text);
-        showToast('已复制到剪贴板', 'success');
+        navigator.clipboard.writeText(patches.map(p => p.raw).join('\n\n'));
+        showToast('已复制', 'success');
       }, [patches]);
 
       const handleExport = useCallback(() => {
@@ -967,7 +1839,7 @@ ${patch.content}`;
         a.download = previewFile.name.split('/').pop();
         a.click();
         URL.revokeObjectURL(url);
-        showToast(`已导出: ${previewFile.name}`, 'success');
+        showToast(`已导出`, 'success');
       }, [previewFile]);
       
       const stats = useMemo(() => {
@@ -977,55 +1849,125 @@ ${patch.content}`;
       }, [patches]);
 
       const createFiles = useMemo(() => patches.filter(p => p.operation === 'CREATE').map(p => p.file), [patches]);
+      
+      // Match files with patches
+      const matchedFiles = useMemo(() => {
+        const matched = {};
+        Object.keys(files).forEach(fileName => {
+          const patchCount = patches.filter(p => 
+            p.file === fileName || 
+            p.file.endsWith('/' + fileName) || 
+            fileName.endsWith(p.file) ||
+            fileName.endsWith('/' + p.file)
+          ).length;
+          if (patchCount > 0) matched[fileName] = patchCount;
+        });
+        return matched;
+      }, [files, patches]);
 
       return (
         <div 
           className={`min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-white ${isDragging ? 'ring-2 ring-inset ring-violet-500' : ''}`}
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
-          onDrop={handleDrop}
+          onDrop={handleFileDrop}
         >
           {isDragging && (
             <div className="fixed inset-0 bg-violet-500/10 backdrop-blur-sm z-50 flex items-center justify-center pointer-events-none">
               <div className="bg-gray-900/90 border-2 border-dashed border-violet-500 rounded-2xl p-12 text-center">
-                <Icons.Upload />
-                <p className="text-xl font-medium text-white mt-4">释放文件以上传</p>
+                <div className="flex justify-center gap-4 mb-4 text-violet-400">
+                  <Icons.Upload />
+                  <Icons.Folder />
+                  <Icons.Archive />
+                </div>
+                <p className="text-xl font-medium text-white">释放文件以上传</p>
+                <p className="text-gray-400 text-sm mt-2">支持文件、文件夹、ZIP压缩包</p>
               </div>
             </div>
           )}
 
+          {/* Modals */}
+          {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+          {showTemplates && <TemplateSelector onSelect={handleTemplateSelect} onClose={() => setShowTemplates(false)} />}
+
           <header className="border-b border-gray-800/50 backdrop-blur-sm bg-gray-900/30 sticky top-0 z-10">
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
-                  <Icons.Code />
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
+                  <Icons.Code size={18} />
                 </div>
                 <div>
-                  <h1 className="text-lg font-semibold">FIUP Tool v3.3</h1>
-                  <p className="text-xs text-gray-500 hidden sm:block">增量补丁 + 多目标定位</p>
+                  <h1 className="text-base font-semibold">FIUP Tool v3.5</h1>
+                  <p className="text-xs text-gray-500 hidden sm:block">增强版 · 语法高亮 · 行内Diff</p>
                 </div>
               </div>
               
               <div className="flex items-center gap-2">
+                {/* Undo/Redo */}
+                <div className="flex items-center gap-1 mr-2">
+                  <button
+                    onClick={() => { patchHistory.undo(); fileHistory.undo(); showToast('撤销', 'info'); }}
+                    disabled={!patchHistory.canUndo}
+                    className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="撤销 (Ctrl+Z)"
+                  >
+                    <Icons.Undo />
+                  </button>
+                  <button
+                    onClick={() => { patchHistory.redo(); fileHistory.redo(); showToast('重做', 'info'); }}
+                    disabled={!patchHistory.canRedo}
+                    className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="重做 (Ctrl+Shift+Z)"
+                  >
+                    <Icons.Redo />
+                  </button>
+                </div>
+                
+                <button
+                  onClick={() => setShowTemplates(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-violet-500/20 to-fuchsia-500/20 text-violet-300 border border-violet-500/30 hover:border-violet-400/50 transition-all"
+                  title="补丁模板 (Ctrl+N)"
+                >
+                  <Icons.Template />
+                  <span className="hidden sm:inline">模板</span>
+                </button>
+                
                 <button
                   onClick={() => setIncrementalMode(!incrementalMode)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                     incrementalMode ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-gray-800/50 text-gray-400 border border-gray-700'
                   }`}
-                  title={incrementalMode ? "增量模式：补丁基于前序补丁的结果匹配" : "独立模式：每个补丁独立匹配原始文件"}
+                  title="增量模式"
                 >
                   <Icons.Layers />
                   <span className="hidden sm:inline">增量</span>
                 </button>
                 <button
                   onClick={() => setFuzzyMatch(!fuzzyMatch)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                     fuzzyMatch ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'bg-gray-800/50 text-gray-400 border border-gray-700'
                   }`}
-                  title={fuzzyMatch ? "宽松匹配：忽略空白差异" : "精确匹配"}
+                  title="宽松匹配"
                 >
                   <Icons.Zap />
                   <span className="hidden sm:inline">宽松</span>
+                </button>
+                <button
+                  onClick={() => setShowDeps(!showDeps)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    showDeps ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'bg-gray-800/50 text-gray-400 border border-gray-700'
+                  }`}
+                  title="依赖视图"
+                >
+                  <Icons.Network />
+                  <span className="hidden sm:inline">依赖</span>
+                </button>
+                <button
+                  onClick={() => setShowShortcuts(true)}
+                  className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white"
+                  title="快捷键 (?)"
+                >
+                  <Icons.Keyboard />
                 </button>
                 <a href="https://github.com/Thankyou-Cheems/FIUP" target="_blank" className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white">
                   <Icons.Github />
@@ -1034,279 +1976,284 @@ ${patch.content}`;
             </div>
           </header>
           
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-            {/* 功能说明横幅 */}
-            {(incrementalMode || fuzzyMatch) && (
-              <div className="mb-6 p-4 bg-gradient-to-r from-cyan-500/10 to-yellow-500/10 border border-cyan-500/20 rounded-xl">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex gap-2">
-                    {incrementalMode && <Icons.Layers />}
-                    {fuzzyMatch && <Icons.Zap />}
-                  </div>
-                  <div className="flex-1 text-xs text-gray-300 space-y-1">
-                    {incrementalMode && (
-                      <p><span className="text-cyan-400 font-medium">增量模式</span>：后续补丁基于前序补丁修改后的内容进行匹配，支持链式修改</p>
-                    )}
-                    {fuzzyMatch && (
-                      <p><span className="text-yellow-400 font-medium">宽松匹配</span>：自动忽略空白字符差异（Tab/空格、行尾空白等）</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
             <div className="flex flex-col lg:flex-row gap-6">
-              {/* 左侧边栏 */}
+              {/* Sidebar */}
               <div className="lg:w-72 xl:w-80 flex-shrink-0">
-                <div className="lg:sticky lg:top-24 space-y-4">
-                  <div 
-                    className="p-4 rounded-xl border-2 border-dashed border-gray-700 hover:border-gray-600 bg-gray-800/30 cursor-pointer"
-                    onClick={() => document.getElementById('file-input').click()}
-                  >
-                    <div className="text-center py-4">
-                      <div className="mx-auto w-12 h-12 rounded-xl bg-gray-800 text-gray-500 flex items-center justify-center mb-3">
-                        <Icons.Upload />
-                      </div>
-                      <p className="text-sm font-medium text-gray-300">拖拽或点击上传</p>
-                      <p className="text-xs text-gray-500 mt-1">上传源文件</p>
+                <div className="lg:sticky lg:top-20 space-y-4">
+                  {/* File Upload */}
+                  <div className="bg-gray-800/30 rounded-xl border border-gray-700/50 p-4">
+                    <div className="text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
+                      <Icons.Upload />
+                      上传文件
                     </div>
-                    <input id="file-input" type="file" multiple className="hidden" onChange={handleFileUpload} />
+                    <div className="grid grid-cols-3 gap-2">
+                      <label className="flex flex-col items-center gap-1 p-3 rounded-lg border border-dashed border-gray-600 hover:border-gray-500 cursor-pointer transition-colors">
+                        <Icons.FileText />
+                        <span className="text-xs text-gray-400">文件</span>
+                        <input type="file" multiple className="hidden" onChange={handleFileUpload} />
+                      </label>
+                      <label className="flex flex-col items-center gap-1 p-3 rounded-lg border border-dashed border-gray-600 hover:border-gray-500 cursor-pointer transition-colors">
+                        <Icons.Folder />
+                        <span className="text-xs text-gray-400">文件夹</span>
+                        <input type="file" webkitdirectory="" className="hidden" onChange={handleFileUpload} />
+                      </label>
+                      <label className="flex flex-col items-center gap-1 p-3 rounded-lg border border-dashed border-gray-600 hover:border-gray-500 cursor-pointer transition-colors">
+                        <Icons.Archive />
+                        <span className="text-xs text-gray-400">ZIP</span>
+                        <input type="file" accept=".zip" className="hidden" onChange={handleFileUpload} />
+                      </label>
+                    </div>
                   </div>
 
+                  {/* File List */}
                   <div className="bg-gray-800/30 rounded-xl border border-gray-700/50 overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/50">
-                      <h3 className="text-sm font-medium text-gray-300">源文件 ({Object.keys(files).length})</h3>
+                      <h3 className="text-sm font-medium text-gray-300">文件 ({Object.keys(files).length})</h3>
                       {Object.keys(files).length > 0 && (
                         <button onClick={() => { setFiles({}); showToast('已清空', 'info'); }} className="text-xs text-gray-500 hover:text-red-400">清空</button>
                       )}
                     </div>
-                    <div className="max-h-64 lg:max-h-96 overflow-y-auto">
+                    <div className="max-h-48 overflow-y-auto">
                       {Object.keys(files).length === 0 ? (
-                        <div className="px-4 py-8 text-center text-gray-600 text-sm">暂无文件</div>
+                        <div className="px-4 py-6 text-center text-gray-600 text-sm">暂无文件</div>
                       ) : (
                         <div className="p-2 space-y-1">
-                          {Object.entries(files).map(([name, content]) => {
-                            const patchCount = patches.filter(p => p.file === name || p.file.endsWith('/' + name)).length;
+                          {Object.entries(files).slice(0, 20).map(([name, content]) => {
+                            const patchCount = matchedFiles[name] || 0;
                             return (
-                              <div key={name} className="flex items-center gap-2 p-2 rounded-lg group hover:bg-gray-700/30">
+                              <div key={name} className="flex items-center gap-2 p-2 rounded-lg group hover:bg-gray-700/30 text-xs">
                                 <Icons.FileText />
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-xs text-gray-300 truncate font-mono">{name}</div>
-                                  <div className="text-xs text-gray-600">{content.split('\n').length} 行</div>
-                                </div>
-                                {patchCount > 0 && <span className="px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400 text-xs">{patchCount}</span>}
+                                <span className="flex-1 truncate text-gray-300 font-mono" title={name}>{name}</span>
+                                {patchCount > 0 && <span className="px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400">{patchCount}</span>}
                                 <button onClick={() => handleDeleteFile(name)} className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-gray-500 hover:text-red-400">
-                                  <Icons.Trash2 />
+                                  <Icons.X />
                                 </button>
                               </div>
                             );
                           })}
+                          {Object.keys(files).length > 20 && (
+                            <div className="text-xs text-gray-500 text-center py-2">
+                              还有 {Object.keys(files).length - 20} 个文件...
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  {createFiles.length > 0 && (
-                    <div className="bg-purple-500/10 rounded-xl border border-purple-500/30 overflow-hidden">
-                      <div className="px-4 py-3 border-b border-purple-500/20">
-                        <h3 className="text-sm font-medium text-purple-300 flex items-center gap-2">
-                          <Icons.FilePlus /> 新建文件 ({createFiles.length})
-                        </h3>
-                      </div>
-                      <div className="p-2 space-y-1">
-                        {createFiles.map(fileName => (
-                          <button key={fileName} onClick={() => handleApplyAndDownload(fileName)} className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-purple-500/20 text-left">
+                  {/* Quick Actions */}
+                  {patches.length > 0 && Object.keys(matchedFiles).length > 0 && (
+                    <div className="bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 rounded-xl border border-violet-500/20 p-3">
+                      <div className="text-xs font-medium text-gray-400 mb-2">一键应用</div>
+                      <div className="space-y-1">
+                        {Object.entries(matchedFiles).slice(0, 5).map(([fileName, count]) => (
+                          <button key={fileName} onClick={() => handleApplyAndDownload(fileName)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 text-xs font-medium text-left">
                             <Icons.Download />
-                            <span className="text-xs text-purple-300 font-mono truncate">{fileName}</span>
+                            <span className="flex-1 truncate">{fileName.split('/').pop()}</span>
+                            <span className="text-violet-400">{count}</span>
                           </button>
                         ))}
                       </div>
                     </div>
                   )}
-
-                  {patches.length > 0 && Object.keys(files).length > 0 && (
-                    <div className="bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 rounded-xl border border-violet-500/20 p-3">
-                      <div className="text-xs font-medium text-gray-400 mb-2">一键应用并下载</div>
-                      <div className="space-y-1">
-                        {[...new Set(patches.filter(p => p.operation !== 'CREATE').map(p => p.file))].map(fileName => {
-                          const hasFile = Object.keys(files).some(f => fileName === f || fileName.endsWith('/' + f));
-                          if (!hasFile) return null;
-                          return (
-                            <button key={fileName} onClick={() => handleApplyAndDownload(fileName)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 text-sm font-medium text-left">
-                              <Icons.Download />
-                              <span className="truncate">{fileName.split('/').pop()}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                  
+                  {/* Shortcut hints */}
+                  <div className="bg-gray-800/20 rounded-xl border border-gray-700/30 p-3">
+                    <div className="text-xs text-gray-500 space-y-1">
+                      <div className="flex justify-between"><span>撤销/重做</span><span><span className="kbd">Ctrl</span>+<span className="kbd">Z</span></span></div>
+                      <div className="flex justify-between"><span>切换补丁</span><span><span className="kbd">Alt</span>+<span className="kbd">↑↓</span></span></div>
+                      <div className="flex justify-between"><span>更多快捷键</span><span><span className="kbd">?</span></span></div>
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
 
-              {/* 主内容区 */}
+              {/* Main Content */}
               <div className="flex-1 min-w-0">
-                <div className="flex gap-1 p-1 bg-gray-800/50 rounded-xl mb-6 w-fit">
+                <div className="flex gap-1 p-1 bg-gray-800/50 rounded-xl mb-4 w-fit">
                   {[
-                    { id: 'input', label: '输入补丁', icon: Icons.FileText },
-                    { id: 'patches', label: `补丁列表 (${stats.total})`, icon: Icons.Code },
-                    { id: 'preview', label: '预览变更', icon: Icons.Eye }
+                    { id: 'input', label: '输入', icon: Icons.FileText },
+                    { id: 'patches', label: `补丁 (${stats.total})`, icon: Icons.Code },
+                    { id: 'preview', label: '预览', icon: Icons.Eye }
                   ].map(tab => (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                         activeTab === tab.id ? 'bg-violet-500 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                       }`}
                     >
                       <tab.icon />
-                      <span className="hidden sm:inline">{tab.label}</span>
+                      {tab.label}
                     </button>
                   ))}
                 </div>
+
+                {/* Dependency Graph */}
+                {showDeps && patches.length > 0 && (
+                  <div className="mb-4">
+                    <DependencyGraph 
+                      patches={patches} 
+                      dependencies={dependencies}
+                      onPatchClick={(id) => { 
+                        setExpandedPatch(id); 
+                        setActivePatchIndex(patches.findIndex(p => p.id === id));
+                        setActiveTab('patches'); 
+                      }}
+                    />
+                  </div>
+                )}
             
                 {activeTab === 'input' && (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between flex-wrap gap-4">
-                      <h2 className="text-lg font-medium">输入 FIUP v3.0 补丁</h2>
-                      <button
-                        onClick={handleParse}
-                        disabled={!patchText.trim()}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-500 hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                      >
-                        <Icons.Play /> 解析补丁
-                      </button>
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-lg font-medium">输入 FIUP 补丁</h2>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setShowTemplates(true)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-gray-300 text-sm"
+                        >
+                          <Icons.Plus /> 从模板新建
+                        </button>
+                        <button
+                          onClick={handleParse}
+                          disabled={!patchText.trim()}
+                          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-500 hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                        >
+                          <Icons.Play /> 解析 <span className="kbd text-[10px] ml-1">Ctrl+Enter</span>
+                        </button>
+                      </div>
                     </div>
                     
                     <textarea
                       value={patchText}
                       onChange={(e) => setPatchText(e.target.value)}
-                      placeholder={`粘贴 FIUP v3.0 补丁内容...
-
-v3.3 新功能:
-🔗 增量补丁模式 - 后续补丁可基于前序补丁修改后的内容匹配
-🎯 多目标定位 - 当锚点匹配多处时，可选择应用位置
-⚡ 宽松匹配 - 自动处理空白字符差异`}
-                      className="w-full h-80 sm:h-96 bg-gray-900/50 border border-gray-700/50 rounded-xl p-4 font-mono text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-violet-500/50 resize-none"
+                      placeholder="粘贴 FIUP 补丁内容..."
+                      className="w-full h-72 bg-gray-900/50 border border-gray-700/50 rounded-xl p-4 font-mono text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-violet-500/50 resize-none"
                     />
+                    
+                    <div className="text-xs text-gray-500 flex flex-wrap gap-4">
+                      <span>✓ 语法高亮</span>
+                      <span>✓ 行内Diff</span>
+                      <span>✓ 智能锚点建议</span>
+                      <span>✓ 补丁模板</span>
+                      <span>✓ 键盘快捷键</span>
+                    </div>
                   </div>
                 )}
             
                 {activeTab === 'patches' && (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {stats.total > 0 && (
-                      <div className="flex items-center gap-4 p-4 bg-gray-800/30 rounded-xl flex-wrap">
-                        <div className="flex items-center gap-4 sm:gap-6 flex-1 flex-wrap">
+                      <div className="flex items-center gap-4 p-3 bg-gray-800/30 rounded-xl text-sm">
+                        <div className="flex items-center gap-4 flex-1 flex-wrap">
                           {Object.entries(stats.byOp).map(([op, count]) => count > 0 && (
                             <div key={op} className="flex items-center gap-2">
                               <span className={`w-2 h-2 rounded-full ${opColors[op]?.text.replace('text-', 'bg-')}`} />
-                              <span className="text-sm text-gray-400">{op}</span>
-                              <span className="text-sm font-medium">{count}</span>
+                              <span className="text-gray-400">{op}</span>
+                              <span className="font-medium">{count}</span>
                             </div>
                           ))}
                         </div>
-                        <button onClick={handleCopyPatches} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm">
-                          <Icons.Copy /> 复制全部
+                        <button onClick={handleCopyPatches} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs">
+                          <Icons.Copy /> 复制
                         </button>
                       </div>
                     )}
-
-                    <div className="flex items-center gap-2 p-3 bg-violet-500/10 border border-violet-500/30 rounded-lg text-sm text-violet-300">
-                      <Icons.Info />
-                      <span>展开补丁查看详情，多目标匹配时可选择应用位置</span>
-                    </div>
                     
-                    <div className="space-y-3">
-                      {patches.length === 0 ? (
-                        <div className="text-center py-16 text-gray-500">
-                          <div className="mx-auto mb-4 opacity-30"><Icons.Code size={48} /></div>
-                          <p>暂无补丁</p>
-                        </div>
-                      ) : (
-                        patches.map((patch, index) => (
+                    {patches.length === 0 ? (
+                      <div className="text-center py-16 text-gray-500">
+                        <div className="mx-auto mb-4 opacity-30"><Icons.Code size={48} /></div>
+                        <p className="mb-4">暂无补丁</p>
+                        <button
+                          onClick={() => setShowTemplates(true)}
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 text-sm"
+                        >
+                          <Icons.Template /> 从模板创建
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {patches.map((patch, index) => (
                           <PatchCard
                             key={patch.id}
                             patch={patch}
                             index={index}
                             expanded={expandedPatch === patch.id}
-                            onToggle={() => setExpandedPatch(expandedPatch === patch.id ? null : patch.id)}
+                            onToggle={() => { 
+                              setExpandedPatch(expandedPatch === patch.id ? null : patch.id);
+                              setActivePatchIndex(index);
+                            }}
                             onDelete={() => handleDeletePatch(patch.id)}
                             onUpdate={handleUpdatePatch}
-                            fileContent={files[patch.file] || files[patch.file.split('/').pop()]}
+                            onMoveUp={() => movePatch(index, -1)}
+                            onMoveDown={() => movePatch(index, 1)}
+                            canMoveUp={index > 0}
+                            canMoveDown={index < patches.length - 1}
+                            fileContent={files[patch.file] || Object.entries(files).find(([k]) => patch.file.endsWith(k) || k.endsWith(patch.file))?.[1]}
                             accumulatedContent={incrementalMode ? accumulatedContents[patch.id] : null}
                             fuzzyMatch={fuzzyMatch}
-                            isIncremental={incrementalMode}
+                            onDragStart={handleDragStart}
+                            onDragOver={handleDragOver}
+                            onDrop={handlePatchDrop}
+                            isDragging={dragIndex === index}
+                            isDropTarget={dropIndex === index && dragIndex !== index}
+                            isActive={activePatchIndex === index}
                           />
-                        ))
-                      )}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
             
                 {activeTab === 'preview' && (
                   <div className="space-y-4">
-                    <div className="flex items-center gap-4 flex-wrap">
-                      <h2 className="text-lg font-medium">选择文件预览</h2>
+                    <div className="flex items-center gap-4">
+                      <h2 className="text-lg font-medium">预览变更</h2>
                       {previewFile && (
                         <button onClick={handleExport} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 text-sm ml-auto">
-                          <Icons.Download /> 导出文件
+                          <Icons.Download /> 导出
                         </button>
                       )}
                     </div>
                     
                     <div className="flex flex-wrap gap-2">
-                      {Object.keys(files).length === 0 && createFiles.length === 0 ? (
-                        <div className="w-full text-center py-8 border-2 border-dashed border-gray-700 rounded-xl">
-                          <p className="text-gray-400">请先上传源文件</p>
+                      {Object.keys(files).length === 0 ? (
+                        <div className="w-full text-center py-8 border-2 border-dashed border-gray-700 rounded-xl text-gray-400">
+                          请先上传文件
                         </div>
                       ) : (
-                        <>
-                          {Object.keys(files).map(name => {
-                            const patchCount = patches.filter(p => p.file === name || p.file.endsWith('/' + name)).length;
-                            return (
-                              <button
-                                key={name}
-                                onClick={() => handlePreview(name)}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
-                                  previewFile?.name === name ? 'bg-violet-500/20 border-violet-500/50 text-violet-300' : 'bg-gray-800/50 border-gray-700/50 hover:border-gray-600'
-                                }`}
-                              >
-                                <Icons.FileText />
-                                <span className="text-sm">{name}</span>
-                                {patchCount > 0 && <span className="px-1.5 py-0.5 rounded bg-violet-500/30 text-xs">{patchCount}</span>}
-                              </button>
-                            );
-                          })}
-                          {patches.filter(p => p.operation === 'CREATE').map(patch => (
-                            <button
-                              key={patch.file}
-                              onClick={() => handlePreviewCreate(patch)}
-                              className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${
-                                previewFile?.name === patch.file ? 'bg-purple-500/20 border-purple-500/50 text-purple-300' : 'bg-purple-500/10 border-purple-500/30 text-purple-400'
-                              }`}
-                            >
-                              <Icons.FilePlus />
-                              <span className="text-sm">{patch.file}</span>
-                              <span className="px-1.5 py-0.5 rounded bg-purple-500/30 text-xs">NEW</span>
-                            </button>
-                          ))}
-                        </>
+                        Object.keys(matchedFiles).map(name => (
+                          <button
+                            key={name}
+                            onClick={() => handlePreview(name)}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${
+                              previewFile?.name === name ? 'bg-violet-500/20 border-violet-500/50 text-violet-300' : 'bg-gray-800/50 border-gray-700/50 hover:border-gray-600 text-gray-300'
+                            }`}
+                          >
+                            <Icons.FileText />
+                            {name.split('/').pop()}
+                            <span className="px-1.5 py-0.5 rounded bg-violet-500/30 text-xs">{matchedFiles[name]}</span>
+                          </button>
+                        ))
                       )}
                     </div>
                     
                     {previewFile && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-medium text-gray-400">
-                            {previewFile.isCreate ? '新文件预览' : '变更预览'}: {previewFile.name}
-                          </h3>
-                          {!previewFile.isCreate && (
-                            <button onClick={() => handlePreview(previewFile.name)} className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-gray-400 hover:text-white">
-                              <Icons.RefreshCw /> 刷新
-                            </button>
-                          )}
+                          <h3 className="text-sm font-medium text-gray-400">{previewFile.name}</h3>
+                          <button onClick={() => handlePreview(previewFile.name)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300">
+                            <Icons.RefreshCw /> 刷新
+                          </button>
                         </div>
-                        <DiffView original={previewFile.original} modified={previewFile.modified} />
+                        <DiffView 
+                          original={previewFile.original} 
+                          modified={previewFile.modified} 
+                          fileName={previewFile.name}
+                          showInlineDiff={true}
+                        />
                       </div>
                     )}
                   </div>
@@ -1315,10 +2262,10 @@ v3.3 新功能:
             </div>
           </main>
           
-          <footer className="border-t border-gray-800/50 mt-auto">
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between text-sm text-gray-500">
-              <span>FIUP Tool v3.3</span>
-              <span className="hidden sm:inline">增量补丁 · 多目标定位 · 宽松匹配</span>
+          <footer className="border-t border-gray-800/50 mt-8">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between text-xs text-gray-500">
+              <span>FIUP Tool v3.5</span>
+              <span className="hidden sm:inline">语法高亮 · 行内Diff · 智能建议 · 补丁模板 · 键盘快捷键</span>
               <a href="https://github.com/Thankyou-Cheems" target="_blank" className="hover:text-gray-300">猹Cheems</a>
             </div>
           </footer>
